@@ -14,6 +14,18 @@ interface PortfolioSimulatorProps {
   initialData: any
   onBack: () => void
 }
+interface SimulatedResults {
+  newTotalScore: number
+  newTotalInvestment: number
+  newAvgReturn: number
+  projectionData: {
+    year: string
+    value: number
+    originalValue: number
+  }[]
+  improvement: number
+}
+
 
 export default function PortfolioSimulator({ initialData, onBack }: PortfolioSimulatorProps) {
   const [simulationData, setSimulationData] = useState({
@@ -24,7 +36,8 @@ export default function PortfolioSimulator({ initialData, onBack }: PortfolioSim
     timeHorizon: 5,
   })
 
-  const [simulatedResults, setSimulatedResults] = useState(null)
+  const [simulatedResults, setSimulatedResults] = useState<SimulatedResults | null>(null)
+
 
   const runSimulation = () => {
     // Mock simulation logic
@@ -59,11 +72,11 @@ export default function PortfolioSimulator({ initialData, onBack }: PortfolioSim
     }
 
     setSimulatedResults({
-      newTotalScore,
-      newTotalInvestment: newTotal,
-      newAvgReturn: Math.round(weightedReturn * 100) / 100,
-      projectionData,
-      improvement: newTotalScore - initialData.totalScore,
+    newTotalScore,
+    newTotalInvestment: newTotal,
+    newAvgReturn: Math.round(weightedReturn * 100) / 100,
+    projectionData,
+    improvement: newTotalScore - initialData.totalScore,
     })
   }
 

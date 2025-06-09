@@ -60,9 +60,9 @@ export default function ResultsDashboard({ data, onBack, onSimulate }: ResultsDa
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Portfolio Analysis Results</h1>
             <p className="text-gray-600 dark:text-gray-300 mt-2">Comprehensive analysis of your investment portfolio</p>
           </div>
-          <Button onClick={onSimulate} variant="outline">
+          {/* <Button onClick={onSimulate} variant="outline">
             <Settings className="mr-2 h-4 w-4" /> Try Simulator
-          </Button>
+          </Button> */}
         </div>
 
         {/* Overall Score */}
@@ -130,7 +130,7 @@ export default function ResultsDashboard({ data, onBack, onSimulate }: ResultsDa
                     fill="#8884d8"
                     dataKey="value"
                   >
-                    {assetAllocationData.map((entry, index) => (
+                    {assetAllocationData.map((entry:any, index:any) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
