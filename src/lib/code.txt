@@ -1,0 +1,304 @@
+public class Investment {
+private String type;
+private double amount;
+private double returnRate;
+private String riskLevel;
+public String getType() {
+    return type;
+}
+
+public void setType(String type) {
+    this.type = type;
+}
+
+public double getAmount() {
+    return amount;
+}
+
+public void setAmount(double amount) {
+    this.amount = amount;
+}
+
+public double getReturnRate() {
+    return returnRate;
+}
+
+public void setReturnRate(double returnRate) {
+    this.returnRate = returnRate;
+}
+
+public String getRiskLevel() {
+    return riskLevel;
+}
+
+public void setRiskLevel(String riskLevel) {
+    this.riskLevel = riskLevel;
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PortfolioRequest.java (DTO)
+
+package com.smartportfolio.dto;
+
+import com.smartportfolio.model.Investment;
+import java.util.List;
+
+public class PortfolioRequest {
+private int age;
+private String riskAppetite;
+private List<Investment> investments;
+public int getAge() {
+    return age;
+}
+
+public void setAge(int age) {
+    this.age = age;
+}
+
+public String getRiskAppetite() {
+    return riskAppetite;
+}
+
+public void setRiskAppetite(String riskAppetite) {
+    this.riskAppetite = riskAppetite;
+}
+
+public List<Investment> getInvestments() {
+    return investments;
+}
+
+public void setInvestments(List<Investment> investments) {
+    this.investments = investments;
+}
+}
+
+
+
+PortfolioScoreResponse.java (DTO)
+
+package com.smartportfolio.dto;
+
+import java.util.List;
+import java.util.Map;
+
+public class PortfolioScoreResponse {
+private int totalScore;
+private Map<String, Integer> breakdown;
+private double avgReturn;
+private double totalInvestment;
+private List<String> suggestions;
+public int getTotalScore() {
+    return totalScore;
+}
+
+public void setTotalScore(int totalScore) {
+    this.totalScore = totalScore;
+}
+
+public Map<String, Integer> getBreakdown() {
+    return breakdown;
+}
+
+public void setBreakdown(Map<String, Integer> breakdown) {
+    this.breakdown = breakdown;
+}
+
+public double getAvgReturn() {
+    return avgReturn;
+}
+
+public void setAvgReturn(double avgReturn) {
+    this.avgReturn = avgReturn;
+}
+
+public double getTotalInvestment() {
+    return totalInvestment;
+}
+
+public void setTotalInvestment(double totalInvestment) {
+    this.totalInvestment = totalInvestment;
+}
+
+public List<String> getSuggestions() {
+    return suggestions;
+}
+
+public void setSuggestions(List<String> suggestions) {
+    this.suggestions = suggestions;
+}
+
+
+}
+
+
+PortfolioController.java
+
+package com.smartportfolio.controller;
+
+import com.smartportfolio.dto.PortfolioRequest;
+import com.smartportfolio.dto.PortfolioScoreResponse;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/portfolio")
+@CrossOrigin(origins = "*") // allow frontend access during dev
+public class PortfolioController {
+
+@PostMapping("/analyze")
+public PortfolioScoreResponse analyzePortfolio(@RequestBody PortfolioRequest request) {
+    // temporary mock logic
+    PortfolioScoreResponse response = new PortfolioScoreResponse();
+    response.setTotalScore(80); // placeholder
+    return response;
+}
+}
+
+
+
+
+
+
+
+PortfolioService.java
+
+package com.smartportfolio.service;
+
+import com.smartportfolio.dto.PortfolioRequest;
+import com.smartportfolio.dto.PortfolioScoreResponse;
+import com.smartportfolio.model.Investment;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+
+@Service
+public class PortfolioService {
+  public PortfolioScoreResponse analyze(PortfolioRequest request) {
+    List<Investment> investments = request.getInvestments();
+    int age = request.getAge();
+    String riskAppetite = request.getRiskAppetite();
+
+    double totalInvestment = investments.stream().mapToDouble(Investment::getAmount).sum();
+    double avgReturn = investments.stream().mapToDouble(Investment::getReturnRate).average().orElse(0.0);
+
+    double profitabilityScore = Math.min(100, Math.max(0, (avgReturn - 5) * 10));
+    double diversificationScore = Math.min(100, investments.size() * 15);
+    double consistencyScore = calculateConsistencyScore(investments);
+    double riskAlignmentScore = calculateRiskAlignment(riskAppetite, investments);
+    double ageAdjustedScore = calculateAgeAdjustment(age, avgReturn);
+
+    int totalScore = (int) Math.round((profitabilityScore + diversificationScore + consistencyScore + riskAlignmentScore + ageAdjustedScore) / 5);
+
+    Map<String, Integer> breakdown = new HashMap<>();
+    breakdown.put("profitability", (int) Math.round(profitabilityScore));
+    breakdown.put("diversification", (int) Math.round(diversificationScore));
+    breakdown.put("consistency", (int) Math.round(consistencyScore));
+    breakdown.put("riskAlignment", (int) Math.round(riskAlignmentScore));
+    breakdown.put("ageAdjusted", (int) Math.round(ageAdjustedScore));
+
+    PortfolioScoreResponse response = new PortfolioScoreResponse();
+    response.setTotalInvestment(totalInvestment);
+    response.setAvgReturn(Math.round(avgReturn * 100.0) / 100.0);
+    response.setTotalScore(totalScore);
+    response.setBreakdown(breakdown);
+    response.setSuggestions(generateSuggestions(totalScore, request));
+
+    return response;
+}
+
+private double calculateConsistencyScore(List<Investment> investments) {
+    int n = investments.size();
+    if (n == 0) return 0.0;
+
+    double mean = investments.stream().mapToDouble(Investment::getReturnRate).average().orElse(0.0);
+    double variance = investments.stream()
+            .mapToDouble(i -> Math.pow(i.getReturnRate() - mean, 2))
+            .sum() / n;
+
+    double stdDev = Math.sqrt(variance);
+    return Math.max(0, Math.min(100, 100 - stdDev * 20));
+}
+
+private double calculateRiskAlignment(String riskAppetite, List<Investment> investments) {
+    Map<String, Integer> riskMap = Map.of("low", 1, "medium", 2, "high", 3);
+    int userRisk = riskMap.getOrDefault(riskAppetite.toLowerCase(), 2);
+
+    double avgInvestmentRisk = investments.stream()
+            .mapToInt(inv -> riskMap.getOrDefault(inv.getRiskLevel().toLowerCase(), 2))
+            .average().orElse(2.0);
+
+    return Math.max(0, 100 - Math.abs(userRisk - avgInvestmentRisk) * 30);
+}
+
+private double calculateAgeAdjustment(int age, double avgReturn) {
+    if (age < 30) return Math.min(100, avgReturn * 8);
+    if (age < 50) return Math.min(100, avgReturn * 6);
+    return Math.min(100, avgReturn * 4);
+}
+
+private List<String> generateSuggestions(int score, PortfolioRequest request) {
+    List<String> suggestions = new ArrayList<>();
+    if (score < 60) {
+        suggestions.add("Consider diversifying your portfolio across different asset classes.");
+        suggestions.add("Review your investment strategy to align with your risk appetite.");
+    }
+    if (request.getInvestments().size() < 5) {
+        suggestions.add("Add more investment types to improve diversification.");
+    }
+    if (request.getAge() > 50 && "high".equalsIgnoreCase(request.getRiskAppetite())) {
+        suggestions.add("Consider reducing risk exposure as you approach retirement.");
+    }
+    return suggestions;
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+Update PortfolioController.java
+
+package com.smartportfolio.controller;
+
+import com.smartportfolio.dto.PortfolioRequest;
+import com.smartportfolio.dto.PortfolioScoreResponse;
+import com.smartportfolio.service.PortfolioService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/portfolio")
+@CrossOrigin(origins = "*")
+public class PortfolioController {
+@Autowired
+private PortfolioService portfolioService;
+
+@PostMapping("/analyze")
+public PortfolioScoreResponse analyzePortfolio(@RequestBody PortfolioRequest request) {
+    return portfolioService.analyze(request);
+}
+}
+
+
+
