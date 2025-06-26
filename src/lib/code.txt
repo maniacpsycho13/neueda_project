@@ -302,3 +302,31 @@ public PortfolioScoreResponse analyzePortfolio(@RequestBody PortfolioRequest req
 
 
 
+
+
+
+
+
+
+
+
+{
+  "age": 25,
+  "riskAppetite": "medium",
+  "investments": [
+    {
+      "type": "Mutual Fund",
+      "amount": 50000,
+      "returnRate": 12,
+      "riskLevel": "medium"
+    },
+    {
+      "type": "SIP",
+      "amount": 20000,
+      "returnRate": 10,
+      "riskLevel": "low"
+    }
+  ]
+}
+
+
