@@ -1,135 +1,113 @@
-user-entitlement/
-├── controller/
-│   └── DemoController.java
-├── model/
-│   ├── ApplicationMst.java
-│   ├── ApplicationProfileDetails.java
-│   ├── RoleMst.java
-│   ├── RoleProfileDetails.java
-│   ├── BusinessUsersMst.java
-│   └── BusinessUserProfileDetails.java
-├── repository/
-│   ├── ApplicationMstRepository.java
-│   ├── ApplicationProfileDetailsRepository.java
-│   ├── RoleMstRepository.java
-│   ├── RoleProfileDetailsRepository.java
-│   ├── BusinessUsersMstRepository.java
-│   └── BusinessUserProfileDetailsRepository.java
-├── UserEntitlementApplication.java
-└── application.properties
+@PostMapping("/grant")
+    public String grantAccess(@RequestBody Map<String, String> payload) {
+        String userId = payload.get("userId");
+        String roleId = payload.get("roleId");
+        String resourceId = payload.get("resourceId");
+        String action = payload.get("action");
 
-
-
-spring.datasource.url=jdbc:postgresql://localhost:5432/your_db
-spring.datasource.username=your_username
-spring.datasource.password=your_password
-spring.datasource.driver-class-name=org.postgresql.Driver
-
-spring.jpa.hibernate.ddl-auto=none
-spring.jpa.show-sql=true
-spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
-
-
-
-Example Model – ApplicationMst.java
-package com.user.entitlement.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-
-@Entity
-@Table(name = "application_mst")
-@Data
-public class ApplicationMst {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(name = "application_name")
-    private String applicationName;
-
-    // Add other columns based on table structure
-}
-
-Repeat similarly for the other 5 tables:
-
-ApplicationProfileDetails.java
-
-RoleMst.java
-
-RoleProfileDetails.java
-
-BusinessUsersMst.java
-
-BusinessUserProfileDetails.java
-
-Just copy the structure and change @Table(name = "...") and column names accordingly.
-
-
-Repository Example – ApplicationMstRepository.java
-java
-Copy
-Edit
-
-
-package com.user.entitlement.repository;
-
-import com.user.entitlement.model.ApplicationMst;
-import org.springframework.data.jpa.repository.JpaRepository;
-
-public interface ApplicationMstRepository extends JpaRepository<ApplicationMst, Long> {
-}
-
-
-DemoController.java
-package com.user.entitlement.controller;
-
-import com.user.entitlement.model.*;
-import com.user.entitlement.repository.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-
-@RestController
-@RequestMapping("/api")
-public class DemoController {
-
-    @Autowired private ApplicationMstRepository applicationRepo;
-    @Autowired private ApplicationProfileDetailsRepository appProfileRepo;
-    @Autowired private RoleMstRepository roleRepo;
-    @Autowired private RoleProfileDetailsRepository roleProfileRepo;
-    @Autowired private BusinessUsersMstRepository businessUserRepo;
-    @Autowired private BusinessUserProfileDetailsRepository businessUserProfileRepo;
-
-    @GetMapping("/applications")
-    public List<ApplicationMst> getAllApplications() {
-        return applicationRepo.findAll();
+        if (userId != null) {
+            BusinessUserProfileDetails entry = new BusinessUserProfileDetails();
+            entry.setUser_identifier(userId);
+            entry.setApp_id(Long.valueOf(resourceId));
+            entry.setUser_role_profile_ind("USER");
+            entry.setUser_profile_details("{\"action\":\"" + action + "\"}");
+            businessUserProfileRepo.save(entry);
+            return "Entitlement granted to user.";
+        } else if (roleId != null) {
+            RoleProfileDetails entry = new RoleProfileDetails();
+            entry.setRole_identifier(roleId);
+            entry.setApp_id(Long.valueOf(resourceId));
+            entry.setRole_profile_details("{\"action\":\"" + action + "\"}");
+            roleProfileRepo.save(entry);
+            return "Entitlement granted to role.";
+        }
+        return "Invalid request: Must provide userId or roleId.";
     }
 
-    @GetMapping("/application-profiles")
-    public List<ApplicationProfileDetails> getAllApplicationProfiles() {
-        return appProfileRepo.findAll();
+
+@DeleteMapping("/revoke")
+    public String revokeAccess(@RequestBody Map<String, String> payload) {
+        String userId = payload.get("userId");
+        String roleId = payload.get("roleId");
+        String resourceId = payload.get("resourceId");
+        if (userId != null) {
+            List<BusinessUserProfileDetails> entries = businessUserProfileRepo.findByUserIdentifier(userId)
+                    .stream().filter(e -> e.getApp_id().equals(Long.valueOf(resourceId))).toList();
+            businessUserProfileRepo.deleteAll(entries);
+            return "Entitlement revoked from user.";
+        } else if (roleId != null) {
+            List<RoleProfileDetails> entries = roleProfileRepo.findByRoleIdentifier(roleId)
+                    .stream().filter(e -> e.getApp_id().equals(Long.valueOf(resourceId))).toList();
+            roleProfileRepo.deleteAll(entries);
+            return "Entitlement revoked from role.";
+        }
+        return "Invalid request: Must provide userId or roleId.";
     }
 
-    @GetMapping("/roles")
-    public List<RoleMst> getAllRoles() {
-        return roleRepo.findAll();
+    @PostMapping("/check")
+    public boolean checkAccess(@RequestBody Map<String, String> payload) {
+        String userId = payload.get("userId");
+        String resourceId = payload.get("resourceId");
+        String action = payload.get("action");
+        List<BusinessUserProfileDetails> entries = businessUserProfileRepo.findByUserIdentifier(userId)
+                .stream().filter(e -> e.getApp_id().equals(Long.valueOf(resourceId))
+                && e.getUser_profile_details().contains(action)).toList();
+        return !entries.isEmpty();
     }
 
-    @GetMapping("/role-profiles")
-    public List<RoleProfileDetails> getAllRoleProfiles() {
-        return roleProfileRepo.findAll();
+    @PostMapping("/bulk-grant")
+    public String bulkGrant(@RequestBody List<Map<String, String>> bulkPayload) {
+        for (Map<String, String> payload : bulkPayload) {
+            grantAccess(payload);
+        }
+        return "Bulk entitlements granted.";
     }
 
-    @GetMapping("/business-users")
-    public List<BusinessUsersMst> getAllBusinessUsers() {
-        return businessUserRepo.findAll();
+    @GetMapping("/search")
+    public List<Object> searchEntitlements(@RequestParam Map<String, String> queryParams) {
+        List<Object> results = new ArrayList<>();
+        if (queryParams.containsKey("userId")) {
+            results.addAll(businessUserProfileRepo.findByUserIdentifier(queryParams.get("userId")));
+        }
+        if (queryParams.containsKey("roleId")) {
+            results.addAll(roleProfileRepo.findByRoleIdentifier(queryParams.get("roleId")));
+        }
+        return results;
     }
 
-    @GetMapping("/business-user-profiles")
-    public List<BusinessUserProfileDetails> getAllBusinessUserProfiles() {
-        return businessUserProfileRepo.findAll();
+    @GetMapping("/audit-logs")
+    public List<String> getAuditLogs(@RequestParam(required = false) String userId,
+                                     @RequestParam(required = false) String resourceId) {
+        List<String> logs = new ArrayList<>();
+        if (userId != null) {
+            logs.add("Audit log for user " + userId);
+        }
+        if (resourceId != null) {
+            logs.add("Audit log for resource " + resourceId);
+        }
+        return logs;
     }
-}
 
+    @GetMapping("/roles/{roleId}/users")
+    public List<String> getUsersByRole(@PathVariable String roleId) {
+        List<BusinessUserProfileDetails> all = businessUserProfileRepo.findAll();
+        List<String> matchedUsers = new ArrayList<>();
+        for (BusinessUserProfileDetails detail : all) {
+            if (detail.getUser_profile_details() != null && detail.getUser_profile_details().contains(roleId)) {
+                matchedUsers.add(detail.getUser_identifier());
+            }
+        }
+        return matchedUsers;
+    }
+
+    @GetMapping("/users/{userId}/roles")
+    public List<String> getRolesByUser(@PathVariable String userId) {
+        List<BusinessUserProfileDetails> details = businessUserProfileRepo.findByUserIdentifier(userId);
+        List<String> roles = new ArrayList<>();
+        for (BusinessUserProfileDetails detail : details) {
+            if (detail.getUser_profile_details() != null) {
+                roles.add(detail.getUser_profile_details());
+            }
+        }
+        return roles;
+    }
