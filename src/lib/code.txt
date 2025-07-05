@@ -1,113 +1,330 @@
-@PostMapping("/grant")
-    public String grantAccess(@RequestBody Map<String, String> payload) {
-        String userId = payload.get("userId");
-        String roleId = payload.get("roleId");
-        String resourceId = payload.get("resourceId");
-        String action = payload.get("action");
+package com.example.documentation.dao;
 
-        if (userId != null) {
-            BusinessUserProfileDetails entry = new BusinessUserProfileDetails();
-            entry.setUser_identifier(userId);
-            entry.setApp_id(Long.valueOf(resourceId));
-            entry.setUser_role_profile_ind("USER");
-            entry.setUser_profile_details("{\"action\":\"" + action + "\"}");
-            businessUserProfileRepo.save(entry);
-            return "Entitlement granted to user.";
-        } else if (roleId != null) {
-            RoleProfileDetails entry = new RoleProfileDetails();
-            entry.setRole_identifier(roleId);
-            entry.setApp_id(Long.valueOf(resourceId));
-            entry.setRole_profile_details("{\"action\":\"" + action + "\"}");
-            roleProfileRepo.save(entry);
-            return "Entitlement granted to role.";
-        }
-        return "Invalid request: Must provide userId or roleId.";
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.List;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import com.example.documentation.dao.impl.DocumentationDAOImpl;
+import com.example.documentation.exception.DocumentationDAOException;
+import com.example.documentation.util.DocumentationUtil;
+import com.example.documentation.vo.ComponentActionVO;
+import com.example.documentation.vo.DocumentationInputVO;
+import com.example.documentation.cache.CacheFactory;
+import com.example.documentation.constants.DocumentationConstants;
+
+@ExtendWith(MockitoExtension.class)
+class DocumentationDAOImplTest {
+
+    @InjectMocks
+    private DocumentationDAOImpl documentationDAO;
+
+    @Mock
+    private Connection mockConnection;
+
+    @Mock
+    private PreparedStatement mockPreparedStatement;
+
+    @Mock
+    private ResultSet mockResultSet;
+
+    @Mock
+    private DocumentationInputVO mockDocumentationInputVO;
+
+    @Mock
+    private ComponentActionVO mockComponentActionVO;
+
+    @Mock
+    private CacheFactory mockCacheFactory;
+
+    private List<ComponentActionVO> mockComponentActions;
+
+    @BeforeEach
+    void setUp() {
+        mockComponentActions = Arrays.asList(mockComponentActionVO);
     }
 
+    @Test
+    void testAddNote_Success() throws Exception {
+        // Arrange
+        when(mockDocumentationInputVO.getNoteDesc()).thenReturn("Test Note");
+        when(mockDocumentationInputVO.getUserInternalId()).thenReturn(123);
+        when(mockDocumentationInputVO.getComponentCode()).thenReturn("COMP001");
+        when(mockDocumentationInputVO.getComponentAction()).thenReturn("ACTION001");
+        when(mockDocumentationInputVO.getComponentRowId()).thenReturn(456);
+        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
 
-@DeleteMapping("/revoke")
-    public String revokeAccess(@RequestBody Map<String, String> payload) {
-        String userId = payload.get("userId");
-        String roleId = payload.get("roleId");
-        String resourceId = payload.get("resourceId");
-        if (userId != null) {
-            List<BusinessUserProfileDetails> entries = businessUserProfileRepo.findByUserIdentifier(userId)
-                    .stream().filter(e -> e.getApp_id().equals(Long.valueOf(resourceId))).toList();
-            businessUserProfileRepo.deleteAll(entries);
-            return "Entitlement revoked from user.";
-        } else if (roleId != null) {
-            List<RoleProfileDetails> entries = roleProfileRepo.findByRoleIdentifier(roleId)
-                    .stream().filter(e -> e.getApp_id().equals(Long.valueOf(resourceId))).toList();
-            roleProfileRepo.deleteAll(entries);
-            return "Entitlement revoked from role.";
+        when(mockComponentActionVO.getComponentCode()).thenReturn("COMP001");
+        when(mockComponentActionVO.getComponentActionCode()).thenReturn("ACTION001");
+        when(mockComponentActionVO.getComponentActionId()).thenReturn(789);
+
+        when(mockResultSet.next()).thenReturn(true);
+        when(mockResultSet.getInt(1)).thenReturn(100);
+
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
+        when(mockPreparedStatement.executeUpdate()).thenReturn(1);
+
+        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
+             MockedStatic<CacheFactory> mockedCacheFactory = mockStatic(CacheFactory.class)) {
+            
+            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
+                     .thenReturn(mockConnection);
+            mockedUtil.when(() -> DocumentationUtil.closeDBConnection(any(), any(), any()))
+                     .thenAnswer(invocation -> null);
+
+            mockedCacheFactory.when(() -> CacheFactory.getInstance(mockDocumentationInputVO))
+                             .thenReturn(mockCacheFactory);
+            when(mockCacheFactory.getCachedObject(DocumentationConstants.COMPONENT_ACTIONS_STR, mockDocumentationInputVO))
+                .thenReturn(mockComponentActions);
+
+            // Act
+            Boolean result = documentationDAO.addNote(mockDocumentationInputVO);
+
+            // Assert
+            assertTrue(result);
+            verify(mockPreparedStatement, times(3)).setInt(anyInt(), anyInt());
+            verify(mockPreparedStatement, times(1)).setString(anyInt(), anyString());
+            verify(mockPreparedStatement, times(2)).executeUpdate();
+            mockedUtil.verify(() -> DocumentationUtil.closeDBConnection(any(), any(), any()), times(3));
         }
-        return "Invalid request: Must provide userId or roleId.";
     }
 
-    @PostMapping("/check")
-    public boolean checkAccess(@RequestBody Map<String, String> payload) {
-        String userId = payload.get("userId");
-        String resourceId = payload.get("resourceId");
-        String action = payload.get("action");
-        List<BusinessUserProfileDetails> entries = businessUserProfileRepo.findByUserIdentifier(userId)
-                .stream().filter(e -> e.getApp_id().equals(Long.valueOf(resourceId))
-                && e.getUser_profile_details().contains(action)).toList();
-        return !entries.isEmpty();
+    @Test
+    void testAddNote_NoComponentActionFound() throws Exception {
+        // Arrange
+        when(mockDocumentationInputVO.getNoteDesc()).thenReturn("Test Note");
+        when(mockDocumentationInputVO.getUserInternalId()).thenReturn(123);
+        when(mockDocumentationInputVO.getComponentCode()).thenReturn("COMP999");
+        when(mockDocumentationInputVO.getComponentAction()).thenReturn("ACTION999");
+        when(mockDocumentationInputVO.getComponentRowId()).thenReturn(456);
+        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
+
+        when(mockComponentActionVO.getComponentCode()).thenReturn("COMP001");
+        when(mockComponentActionVO.getComponentActionCode()).thenReturn("ACTION001");
+
+        when(mockResultSet.next()).thenReturn(true);
+        when(mockResultSet.getInt(1)).thenReturn(100);
+
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
+        when(mockPreparedStatement.executeUpdate()).thenReturn(1);
+
+        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
+             MockedStatic<CacheFactory> mockedCacheFactory = mockStatic(CacheFactory.class)) {
+            
+            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
+                     .thenReturn(mockConnection);
+            mockedUtil.when(() -> DocumentationUtil.closeDBConnection(any(), any(), any()))
+                     .thenAnswer(invocation -> null);
+
+            mockedCacheFactory.when(() -> CacheFactory.getInstance(mockDocumentationInputVO))
+                             .thenReturn(mockCacheFactory);
+            when(mockCacheFactory.getCachedObject(DocumentationConstants.COMPONENT_ACTIONS_STR, mockDocumentationInputVO))
+                .thenReturn(mockComponentActions);
+
+            // Act
+            Boolean result = documentationDAO.addNote(mockDocumentationInputVO);
+
+            // Assert
+            assertTrue(result);
+            // Verify that the method still completes successfully even when no component action is found
+            verify(mockPreparedStatement, times(2)).executeUpdate();
+        }
     }
 
-    @PostMapping("/bulk-grant")
-    public String bulkGrant(@RequestBody List<Map<String, String>> bulkPayload) {
-        for (Map<String, String> payload : bulkPayload) {
-            grantAccess(payload);
+    @Test
+    void testAddNote_SequenceGenerationFails() throws Exception {
+        // Arrange
+        when(mockDocumentationInputVO.getNoteDesc()).thenReturn("Test Note");
+        when(mockDocumentationInputVO.getUserInternalId()).thenReturn(123);
+        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
+
+        when(mockResultSet.next()).thenReturn(false); // No sequence value returned
+
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
+
+        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
+             MockedStatic<CacheFactory> mockedCacheFactory = mockStatic(CacheFactory.class)) {
+            
+            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
+                     .thenReturn(mockConnection);
+            mockedUtil.when(() -> DocumentationUtil.closeDBConnection(any(), any(), any()))
+                     .thenAnswer(invocation -> null);
+
+            mockedCacheFactory.when(() -> CacheFactory.getInstance(mockDocumentationInputVO))
+                             .thenReturn(mockCacheFactory);
+            when(mockCacheFactory.getCachedObject(DocumentationConstants.COMPONENT_ACTIONS_STR, mockDocumentationInputVO))
+                .thenReturn(mockComponentActions);
+
+            // Act & Assert
+            assertThrows(NullPointerException.class, () -> {
+                documentationDAO.addNote(mockDocumentationInputVO);
+            });
         }
-        return "Bulk entitlements granted.";
     }
 
-    @GetMapping("/search")
-    public List<Object> searchEntitlements(@RequestParam Map<String, String> queryParams) {
-        List<Object> results = new ArrayList<>();
-        if (queryParams.containsKey("userId")) {
-            results.addAll(businessUserProfileRepo.findByUserIdentifier(queryParams.get("userId")));
+    @Test
+    void testAddNote_DatabaseException() throws Exception {
+        // Arrange
+        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
+        
+        SQLException sqlException = new SQLException("Database connection failed");
+
+        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class)) {
+            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
+                     .thenThrow(sqlException);
+            mockedUtil.when(() -> DocumentationUtil.closeDBConnection(any(), any(), any()))
+                     .thenAnswer(invocation -> null);
+
+            // Act & Assert
+            DocumentationDAOException exception = assertThrows(DocumentationDAOException.class, () -> {
+                documentationDAO.addNote(mockDocumentationInputVO);
+            });
+
+            assertEquals(sqlException, exception.getCause());
         }
-        if (queryParams.containsKey("roleId")) {
-            results.addAll(roleProfileRepo.findByRoleIdentifier(queryParams.get("roleId")));
-        }
-        return results;
     }
 
-    @GetMapping("/audit-logs")
-    public List<String> getAuditLogs(@RequestParam(required = false) String userId,
-                                     @RequestParam(required = false) String resourceId) {
-        List<String> logs = new ArrayList<>();
-        if (userId != null) {
-            logs.add("Audit log for user " + userId);
+    @Test
+    void testAddNote_PreparedStatementException() throws Exception {
+        // Arrange
+        when(mockDocumentationInputVO.getNoteDesc()).thenReturn("Test Note");
+        when(mockDocumentationInputVO.getUserInternalId()).thenReturn(123);
+        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
+
+        when(mockResultSet.next()).thenReturn(true);
+        when(mockResultSet.getInt(1)).thenReturn(100);
+
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
+        
+        SQLException sqlException = new SQLException("PreparedStatement execution failed");
+        when(mockPreparedStatement.executeUpdate()).thenThrow(sqlException);
+
+        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
+             MockedStatic<CacheFactory> mockedCacheFactory = mockStatic(CacheFactory.class)) {
+            
+            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
+                     .thenReturn(mockConnection);
+            mockedUtil.when(() -> DocumentationUtil.closeDBConnection(any(), any(), any()))
+                     .thenAnswer(invocation -> null);
+
+            mockedCacheFactory.when(() -> CacheFactory.getInstance(mockDocumentationInputVO))
+                             .thenReturn(mockCacheFactory);
+            when(mockCacheFactory.getCachedObject(DocumentationConstants.COMPONENT_ACTIONS_STR, mockDocumentationInputVO))
+                .thenReturn(mockComponentActions);
+
+            // Act & Assert
+            DocumentationDAOException exception = assertThrows(DocumentationDAOException.class, () -> {
+                documentationDAO.addNote(mockDocumentationInputVO);
+            });
+
+            assertEquals(sqlException, exception.getCause());
         }
-        if (resourceId != null) {
-            logs.add("Audit log for resource " + resourceId);
-        }
-        return logs;
     }
 
-    @GetMapping("/roles/{roleId}/users")
-    public List<String> getUsersByRole(@PathVariable String roleId) {
-        List<BusinessUserProfileDetails> all = businessUserProfileRepo.findAll();
-        List<String> matchedUsers = new ArrayList<>();
-        for (BusinessUserProfileDetails detail : all) {
-            if (detail.getUser_profile_details() != null && detail.getUser_profile_details().contains(roleId)) {
-                matchedUsers.add(detail.getUser_identifier());
-            }
+    @Test
+    void testAddNote_WithSourceDBConnection() throws Exception {
+        // Arrange
+        when(mockDocumentationInputVO.getNoteDesc()).thenReturn("Test Note");
+        when(mockDocumentationInputVO.getUserInternalId()).thenReturn(123);
+        when(mockDocumentationInputVO.getComponentCode()).thenReturn("COMP001");
+        when(mockDocumentationInputVO.getComponentAction()).thenReturn("ACTION001");
+        when(mockDocumentationInputVO.getComponentRowId()).thenReturn(456);
+        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(true); // Source DB connection
+
+        when(mockComponentActionVO.getComponentCode()).thenReturn("COMP001");
+        when(mockComponentActionVO.getComponentActionCode()).thenReturn("ACTION001");
+        when(mockComponentActionVO.getComponentActionId()).thenReturn(789);
+
+        when(mockResultSet.next()).thenReturn(true);
+        when(mockResultSet.getInt(1)).thenReturn(100);
+
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
+        when(mockPreparedStatement.executeUpdate()).thenReturn(1);
+
+        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
+             MockedStatic<CacheFactory> mockedCacheFactory = mockStatic(CacheFactory.class)) {
+            
+            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
+                     .thenReturn(mockConnection);
+            mockedUtil.when(() -> DocumentationUtil.closeDBConnection(any(), any(), any()))
+                     .thenAnswer(invocation -> null);
+
+            mockedCacheFactory.when(() -> CacheFactory.getInstance(mockDocumentationInputVO))
+                             .thenReturn(mockCacheFactory);
+            when(mockCacheFactory.getCachedObject(DocumentationConstants.COMPONENT_ACTIONS_STR, mockDocumentationInputVO))
+                .thenReturn(mockComponentActions);
+
+            // Act
+            Boolean result = documentationDAO.addNote(mockDocumentationInputVO);
+
+            // Assert
+            assertTrue(result);
+            // Verify that connection is handled differently for source DB connection
+            mockedUtil.verify(() -> DocumentationUtil.closeDBConnection(isNull(), isNull(), isNull()), times(1));
         }
-        return matchedUsers;
     }
 
-    @GetMapping("/users/{userId}/roles")
-    public List<String> getRolesByUser(@PathVariable String userId) {
-        List<BusinessUserProfileDetails> details = businessUserProfileRepo.findByUserIdentifier(userId);
-        List<String> roles = new ArrayList<>();
-        for (BusinessUserProfileDetails detail : details) {
-            if (detail.getUser_profile_details() != null) {
-                roles.add(detail.getUser_profile_details());
-            }
+    @Test
+    void testAddNote_CloseConnectionException() throws Exception {
+        // Arrange
+        when(mockDocumentationInputVO.getNoteDesc()).thenReturn("Test Note");
+        when(mockDocumentationInputVO.getUserInternalId()).thenReturn(123);
+        when(mockDocumentationInputVO.getComponentCode()).thenReturn("COMP001");
+        when(mockDocumentationInputVO.getComponentAction()).thenReturn("ACTION001");
+        when(mockDocumentationInputVO.getComponentRowId()).thenReturn(456);
+        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
+
+        when(mockComponentActionVO.getComponentCode()).thenReturn("COMP001");
+        when(mockComponentActionVO.getComponentActionCode()).thenReturn("ACTION001");
+        when(mockComponentActionVO.getComponentActionId()).thenReturn(789);
+
+        when(mockResultSet.next()).thenReturn(true);
+        when(mockResultSet.getInt(1)).thenReturn(100);
+
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
+        when(mockPreparedStatement.executeUpdate()).thenReturn(1);
+
+        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
+             MockedStatic<CacheFactory> mockedCacheFactory = mockStatic(CacheFactory.class)) {
+            
+            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
+                     .thenReturn(mockConnection);
+            mockedUtil.when(() -> DocumentationUtil.closeDBConnection(any(), any(), any()))
+                     .thenAnswer(invocation -> null);
+            // Make the final closeDBConnection call throw an exception
+            mockedUtil.when(() -> DocumentationUtil.closeDBConnection(eq(mockConnection), isNull(), isNull()))
+                     .thenThrow(new RuntimeException("Close connection failed"));
+
+            mockedCacheFactory.when(() -> CacheFactory.getInstance(mockDocumentationInputVO))
+                             .thenReturn(mockCacheFactory);
+            when(mockCacheFactory.getCachedObject(DocumentationConstants.COMPONENT_ACTIONS_STR, mockDocumentationInputVO))
+                .thenReturn(mockComponentActions);
+
+            // Act
+            Boolean result = documentationDAO.addNote(mockDocumentationInputVO);
+
+            // Assert
+            assertTrue(result); // Method should still return true even if close connection fails
         }
-        return roles;
     }
+}
