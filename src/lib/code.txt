@@ -1,123 +1,5 @@
-@Test
-    void getUserInternalId_Success() throws Exception {
-        // Setup
-        DocumentationInputVO input = new DocumentationInputVO();
-        input.setUserIdentifier("test.user");
-        input.setSourceDBConnection(false);
-        
-        try (MockedStatic<DocumentationUtil> utilMock = mockStatic(DocumentationUtil.class)) {
-            // Mock dependencies
-            Connection mockConn = mock(Connection.class);
-            PreparedStatement mockStmt = mock(PreparedStatement.class);
-            ResultSet mockRs = mock(ResultSet.class);
-            
-            utilMock.when(() -> DocumentationUtil.getRCMDBConnection(input))
-                    .thenReturn(mockConn);
-            
-            when(mockConn.prepareStatement(anyString())).thenReturn(mockStmt);
-            when(mockStmt.executeQuery()).thenReturn(mockRs);
-            when(mockRs.next()).thenReturn(true);
-            when(mockRs.getInt("USER_INTERNAL_ID")).thenReturn(123);
-            
-            // Execute
-            Integer result = dao.getUserInternalId(input);
-            
-            // Verify
-            assertEquals(123, result);
-            verify(mockStmt).setString(1, "test.user");
-            utilMock.verify(() -> 
-                DocumentationUtil.closeDBConnection(eq(mockConn), isNull(), isNull())
-            );
-        }
-    }
-
-    @Test
-    void getUserInternalId_NotFound() throws Exception {
-        // Setup
-        DocumentationInputVO input = new DocumentationInputVO();
-        input.setUserIdentifier("unknown.user");
-        input.setSourceDBConnection(true);  // Should not close connection
-        
-        try (MockedStatic<DocumentationUtil> utilMock = mockStatic(DocumentationUtil.class)) {
-            // Mock dependencies
-            Connection mockConn = mock(Connection.class);
-            PreparedStatement mockStmt = mock(PreparedStatement.class);
-            ResultSet mockRs = mock(ResultSet.class);
-            
-            utilMock.when(() -> DocumentationUtil.getRCMDBConnection(input))
-                    .thenReturn(mockConn);
-            
-            when(mockConn.prepareStatement(anyString())).thenReturn(mockStmt);
-            when(mockStmt.executeQuery()).thenReturn(mockRs);
-            when(mockRs.next()).thenReturn(false);  // No results
-            
-            // Execute
-            Integer result = dao.getUserInternalId(input);
-            
-            // Verify
-            assertEquals(0, result);
-            verify(mockStmt).setString(1, "unknown.user");
-            utilMock.verify(() -> 
-                DocumentationUtil.closeDBConnection(isNull(), isNull(), isNull())
-            );
-        }
-    }
-
-    @Test
-    void getUserInternalId_DatabaseError() {
-        // Setup
-        DocumentationInputVO input = new DocumentationInputVO();
-        input.setUserIdentifier("test.user");
-        
-        try (MockedStatic<DocumentationUtil> utilMock = mockStatic(DocumentationUtil.class)) {
-            // Force database error
-            utilMock.when(() -> DocumentationUtil.getRCMDBConnection(input))
-                    .thenThrow(new SQLException("Connection failed"));
-            
-            // Execute & Verify
-            assertThrows(DocumentationDAOException.class, 
-                () -> dao.getUserInternalId(input)
-            );
-        }
-    }
-
-    @Test
-    void getUserInternalId_CloseFailure() throws Exception {
-        // Setup
-        DocumentationInputVO input = new DocumentationInputVO();
-        input.setUserIdentifier("test.user");
-        input.setSourceDBConnection(false);
-        
-        try (MockedStatic<DocumentationUtil> utilMock = mockStatic(DocumentationUtil.class)) {
-            // Mock dependencies
-            Connection mockConn = mock(Connection.class);
-            PreparedStatement mockStmt = mock(PreparedStatement.class);
-            ResultSet mockRs = mock(ResultSet.class);
-            
-            utilMock.when(() -> DocumentationUtil.getRCMDBConnection(input))
-                    .thenReturn(mockConn);
-            
-            when(mockConn.prepareStatement(anyString())).thenReturn(mockStmt);
-            when(mockStmt.executeQuery()).thenReturn(mockRs);
-            when(mockRs.next()).thenReturn(true);
-            when(mockRs.getInt("USER_INTERNAL_ID")).thenReturn(123);
-            
-            // Force close failure
-            doThrow(new SQLException("Close failed")).when(mockConn).close();
-            
-            // Execute & Verify
-            assertDoesNotThrow(() -> dao.getUserInternalId(input));
-            utilMock.verify(() -> 
-                DocumentationUtil.closeDBConnection(eq(mockConn), isNull(), isNull())
-            );
-        }
-    }
-
-    @Test
-    void getUserInternalId_NullUserIdentifier() throws Exception {
-        // Setup
-        DocumentationInputVO input = new DocumentationInputVO();
-        input.setUserIdentifier(null);
+DocumentationInputVO input = new DocumentationInputVO();
+        input.setAttachmentInternalId(123);
         input.setSourceDBConnection(false);
         
         try (MockedStatic<DocumentationUtil> utilMock = mockStatic(DocumentationUtil.class)) {
@@ -133,11 +15,10 @@
             when(mockStmt.executeQuery()).thenReturn(mockRs);
             when(mockRs.next()).thenReturn(false);
             
-            // Execute
-            Integer result = dao.getUserInternalId(input);
+            // Force close failure
+            doThrow(new RuntimeException("Close error")).when(mockConn).close();
             
-            // Verify
-            assertEquals(0, result);
-            verify(mockStmt).setString(1, null);
+            // Execute & Verify
+            assertDoesNotThrow(() -> dao.getSingleAttachment(input));
         }
-    }
+
