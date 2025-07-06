@@ -1,236 +1,209 @@
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-@ExtendWith(MockitoExtension.class)
-public class DocumentationBOImplTest {
-
-    @Mock
-    private IDocumentationDAO documentationDAO;
+@Test
+    public void testAddNote_Success_WithValidUserIdentifier() throws DocumentationDAOException, DocumentationBOException {
+        // Arrange
+        try (MockedStatic<DocumentationDAOFactory> mockedFactory = mockStatic(DocumentationDAOFactory.class);
+             MockedStatic<LoggerFactory> mockedLoggerFactory = mockStatic(LoggerFactory.class)) {
+            
+            mockedFactory.when(DocumentationDAOFactory::getInstance).thenReturn(documentationDAOFactory);
+            when(documentationDAOFactory.getDocumentationDAO()).thenReturn(documentationDAO);
+            mockedLoggerFactory.when(() -> LoggerFactory.getLogger(DocumentationB0Impl.class)).thenReturn(logger);
+            
+            when(documentationDAO.getUserInternalId(documentationInputVO)).thenReturn("67890");
+            when(documentationDAO.addNote(documentationInputVO)).thenReturn(true);
+            
+            // Act
+            Boolean result = documentationBO.addNote(documentationInputVO);
+            
+            // Assert
+            assertTrue(result);
+            verify(documentationDAO).getUserInternalId(documentationInputVO);
+            verify(documentationDAO).addNote(documentationInputVO);
+            verify(logger).debug("Entering addNote()");
+            verify(logger).debug("Exiting addNote()");
+            assertEquals("67890", documentationInputVO.getUserInternalId());
+        }
+    }
     
-    @Mock
-    private DocumentationDAOFactory daoFactory;
+    @Test
+    public void testAddNote_Success_WithEmptyUserIdentifier() throws DocumentationDAOException, DocumentationBOException {
+        // Arrange
+        documentationInputVO.setUserIdentifier("");
+        
+        try (MockedStatic<DocumentationDAOFactory> mockedFactory = mockStatic(DocumentationDAOFactory.class);
+             MockedStatic<LoggerFactory> mockedLoggerFactory = mockStatic(LoggerFactory.class)) {
+            
+            mockedFactory.when(DocumentationDAOFactory::getInstance).thenReturn(documentationDAOFactory);
+            when(documentationDAOFactory.getDocumentationDAO()).thenReturn(documentationDAO);
+            mockedLoggerFactory.when(() -> LoggerFactory.getLogger(DocumentationB0Impl.class)).thenReturn(logger);
+            
+            when(documentationDAO.addNote(documentationInputVO)).thenReturn(true);
+            
+            // Act
+            Boolean result = documentationBO.addNote(documentationInputVO);
+            
+            // Assert
+            assertTrue(result);
+            verify(documentationDAO, never()).getUserInternalId(any());
+            verify(documentationDAO).addNote(documentationInputVO);
+            verify(logger).debug("Entering addNote()");
+            verify(logger).debug("Exiting addNote()");
+        }
+    }
     
-    @InjectMocks
-    private DocumentationBOImpl bo;
+    @Test
+    public void testAddNote_Success_WithNullUserIdentifier() throws DocumentationDAOException, DocumentationBOException {
+        // Arrange
+        documentationInputVO.setUserIdentifier(null);
+        
+        try (MockedStatic<DocumentationDAOFactory> mockedFactory = mockStatic(DocumentationDAOFactory.class);
+             MockedStatic<LoggerFactory> mockedLoggerFactory = mockStatic(LoggerFactory.class)) {
+            
+            mockedFactory.when(DocumentationDAOFactory::getInstance).thenReturn(documentationDAOFactory);
+            when(documentationDAOFactory.getDocumentationDAO()).thenReturn(documentationDAO);
+            mockedLoggerFactory.when(() -> LoggerFactory.getLogger(DocumentationB0Impl.class)).thenReturn(logger);
+            
+            when(documentationDAO.addNote(documentationInputVO)).thenReturn(true);
+            
+            // Act
+            Boolean result = documentationBO.addNote(documentationInputVO);
+            
+            // Assert
+            assertTrue(result);
+            verify(documentationDAO, never()).getUserInternalId(any());
+            verify(documentationDAO).addNote(documentationInputVO);
+            verify(logger).debug("Entering addNote()");
+            verify(logger).debug("Exiting addNote()");
+        }
+    }
     
-    private DocumentationInputVO input;
-
-    @BeforeEach
-    void setUp() {
-        input = new DocumentationInputVO();
-        input.setUserIdentifier("test.user");
-        when(daoFactory.getDocumentationDAO()).thenReturn(documentationDAO);
-    }
-
     @Test
-    void addNote_Success() throws Exception {
-        // Setup
-        input.setUserInternalId(null);
-        when(documentationDAO.getUserInternalId(any())).thenReturn(100);
-        when(documentationDAO.addNote(any())).thenReturn(true);
-        
-        // Execute
-        Boolean result = bo.addNote(input);
-        
-        // Verify
-        assertTrue(result);
-        assertEquals(100, input.getUserInternalId());
-        verify(documentationDAO).getUserInternalId(input);
-        verify(documentationDAO).addNote(input);
+    public void testAddNote_ReturnsFalse_WhenDAOReturnsFalse() throws DocumentationDAOException, DocumentationBOException {
+        // Arrange
+        try (MockedStatic<DocumentationDAOFactory> mockedFactory = mockStatic(DocumentationDAOFactory.class);
+             MockedStatic<LoggerFactory> mockedLoggerFactory = mockStatic(LoggerFactory.class)) {
+            
+            mockedFactory.when(DocumentationDAOFactory::getInstance).thenReturn(documentationDAOFactory);
+            when(documentationDAOFactory.getDocumentationDAO()).thenReturn(documentationDAO);
+            mockedLoggerFactory.when(() -> LoggerFactory.getLogger(DocumentationB0Impl.class)).thenReturn(logger);
+            
+            when(documentationDAO.getUserInternalId(documentationInputVO)).thenReturn("67890");
+            when(documentationDAO.addNote(documentationInputVO)).thenReturn(false);
+            
+            // Act
+            Boolean result = documentationBO.addNote(documentationInputVO);
+            
+            // Assert
+            assertFalse(result);
+            verify(documentationDAO).getUserInternalId(documentationInputVO);
+            verify(documentationDAO).addNote(documentationInputVO);
+            verify(logger).debug("Entering addNote()");
+            verify(logger).debug("Exiting addNote()");
+        }
     }
-
+    
+    @Test(expected = DocumentationBOException.class)
+    public void testAddNote_ThrowsDocumentationBOException_WhenDAOThrowsException() throws DocumentationDAOException, DocumentationBOException {
+        // Arrange
+        DocumentationDAOException daoException = new DocumentationDAOException("Database error");
+        
+        try (MockedStatic<DocumentationDAOFactory> mockedFactory = mockStatic(DocumentationDAOFactory.class);
+             MockedStatic<LoggerFactory> mockedLoggerFactory = mockStatic(LoggerFactory.class)) {
+            
+            mockedFactory.when(DocumentationDAOFactory::getInstance).thenReturn(documentationDAOFactory);
+            when(documentationDAOFactory.getDocumentationDAO()).thenReturn(documentationDAO);
+            mockedLoggerFactory.when(() -> LoggerFactory.getLogger(DocumentationB0Impl.class)).thenReturn(logger);
+            
+            when(documentationDAO.getUserInternalId(documentationInputVO)).thenReturn("67890");
+            when(documentationDAO.addNote(documentationInputVO)).thenThrow(daoException);
+            
+            // Act & Assert
+            try {
+                documentationBO.addNote(documentationInputVO);
+            } finally {
+                verify(documentationDAO).getUserInternalId(documentationInputVO);
+                verify(documentationDAO).addNote(documentationInputVO);
+                verify(logger).debug("Entering addNote()");
+                verify(logger).debug(any(String.class), eq(daoException));
+                verify(logger, never()).debug("Exiting addNote()");
+            }
+        }
+    }
+    
+    @Test(expected = DocumentationBOException.class)
+    public void testAddNote_ThrowsDocumentationBOException_WhenGetUserInternalIdThrowsException() throws DocumentationDAOException, DocumentationBOException {
+        // Arrange
+        DocumentationDAOException daoException = new DocumentationDAOException("User not found");
+        
+        try (MockedStatic<DocumentationDAOFactory> mockedFactory = mockStatic(DocumentationDAOFactory.class);
+             MockedStatic<LoggerFactory> mockedLoggerFactory = mockStatic(LoggerFactory.class)) {
+            
+            mockedFactory.when(DocumentationDAOFactory::getInstance).thenReturn(documentationDAOFactory);
+            when(documentationDAOFactory.getDocumentationDAO()).thenReturn(documentationDAO);
+            mockedLoggerFactory.when(() -> LoggerFactory.getLogger(DocumentationB0Impl.class)).thenReturn(logger);
+            
+            when(documentationDAO.getUserInternalId(documentationInputVO)).thenThrow(daoException);
+            
+            // Act & Assert
+            try {
+                documentationBO.addNote(documentationInputVO);
+            } finally {
+                verify(documentationDAO).getUserInternalId(documentationInputVO);
+                verify(documentationDAO, never()).addNote(any());
+                verify(logger).debug("Entering addNote()");
+                verify(logger).debug(any(String.class), eq(daoException));
+                verify(logger, never()).debug("Exiting addNote()");
+            }
+        }
+    }
+    
     @Test
-    void addNote_UserInternalIdAlreadySet() throws Exception {
-        // Setup
-        input.setUserInternalId(200);  // Pre-set ID
-        when(documentationDAO.addNote(any())).thenReturn(true);
+    public void testAddNote_Success_WithCaseInsensitiveEmptyUserIdentifier() throws DocumentationDAOException, DocumentationBOException {
+        // Arrange
+        documentationInputVO.setUserIdentifier("   "); // whitespace only
         
-        // Execute
-        Boolean result = bo.addNote(input);
-        
-        // Verify
-        assertTrue(result);
-        assertEquals(200, input.getUserInternalId());
-        verify(documentationDAO, never()).getUserInternalId(any());
-        verify(documentationDAO).addNote(input);
+        try (MockedStatic<DocumentationDAOFactory> mockedFactory = mockStatic(DocumentationDAOFactory.class);
+             MockedStatic<LoggerFactory> mockedLoggerFactory = mockStatic(LoggerFactory.class)) {
+            
+            mockedFactory.when(DocumentationDAOFactory::getInstance).thenReturn(documentationDAOFactory);
+            when(documentationDAOFactory.getDocumentationDAO()).thenReturn(documentationDAO);
+            mockedLoggerFactory.when(() -> LoggerFactory.getLogger(DocumentationB0Impl.class)).thenReturn(logger);
+            
+            when(documentationDAO.getUserInternalId(documentationInputVO)).thenReturn("67890");
+            when(documentationDAO.addNote(documentationInputVO)).thenReturn(true);
+            
+            // Act
+            Boolean result = documentationBO.addNote(documentationInputVO);
+            
+            // Assert
+            assertTrue(result);
+            verify(documentationDAO).getUserInternalId(documentationInputVO);
+            verify(documentationDAO).addNote(documentationInputVO);
+            verify(logger).debug("Entering addNote()");
+            verify(logger).debug("Exiting addNote()");
+        }
     }
-
+    
     @Test
-    void addNote_DAOException() throws Exception {
-        // Setup
-        when(documentationDAO.getUserInternalId(any()))
-            .thenThrow(new DocumentationDAOException("DB error"));
+    public void testAddNote_VerifyUserInternalIdIsSet() throws DocumentationDAOException, DocumentationBOException {
+        // Arrange
+        String expectedInternalId = "INTERNAL_12345";
         
-        // Execute & Verify
-        assertThrows(DocumentationBOException.class, 
-            () -> bo.addNote(input)
-        );
+        try (MockedStatic<DocumentationDAOFactory> mockedFactory = mockStatic(DocumentationDAOFactory.class);
+             MockedStatic<LoggerFactory> mockedLoggerFactory = mockStatic(LoggerFactory.class)) {
+            
+            mockedFactory.when(DocumentationDAOFactory::getInstance).thenReturn(documentationDAOFactory);
+            when(documentationDAOFactory.getDocumentationDAO()).thenReturn(documentationDAO);
+            mockedLoggerFactory.when(() -> LoggerFactory.getLogger(DocumentationB0Impl.class)).thenReturn(logger);
+            
+            when(documentationDAO.getUserInternalId(documentationInputVO)).thenReturn(expectedInternalId);
+            when(documentationDAO.addNote(documentationInputVO)).thenReturn(true);
+            
+            // Act
+            documentationBO.addNote(documentationInputVO);
+            
+            // Assert
+            assertEquals(expectedInternalId, documentationInputVO.getUserInternalId());
+            verify(documentationDAO).getUserInternalId(documentationInputVO);
+            verify(documentationDAO).addNote(documentationInputVO);
+        }
     }
-
-    @Test
-    void addAttachments_Success() throws Exception {
-        // Setup
-        List<DocumentationInputVO> inputList = new ArrayList<>();
-        inputList.add(input);
-        inputList.add(new DocumentationInputVO());
-        
-        when(documentationDAO.getUserInternalId(any())).thenReturn(100);
-        when(documentationDAO.addAttachment(any())).thenReturn(true);
-        
-        // Execute
-        Boolean result = bo.addAttachments(inputList);
-        
-        // Verify
-        assertTrue(result);
-        verify(documentationDAO, times(2)).getUserInternalId(any());
-        verify(documentationDAO, times(2)).addAttachment(any());
-    }
-
-    @Test
-    void addAttachments_EmptyList() throws Exception {
-        // Execute
-        Boolean result = bo.addAttachments(Collections.emptyList());
-        
-        // Verify
-        assertFalse(result);
-        verify(documentationDAO, never()).getUserInternalId(any());
-        verify(documentationDAO, never()).addAttachment(any());
-    }
-
-    @Test
-    void addAttachments_PartialFailure() throws Exception {
-        // Setup
-        List<DocumentationInputVO> inputList = new ArrayList<>();
-        inputList.add(input);  // Success
-        DocumentationInputVO input2 = new DocumentationInputVO();
-        inputList.add(input2); // Failure
-        
-        when(documentationDAO.getUserInternalId(any()))
-            .thenReturn(100)    // First call success
-            .thenThrow(new DocumentationDAOException("DB error")); // Second call fails
-        
-        // Execute & Verify
-        assertThrows(DocumentationBOException.class, 
-            () -> bo.addAttachments(inputList)
-        );
-        verify(documentationDAO).getUserInternalId(input);
-        verify(documentationDAO, never()).addAttachment(any());
-    }
-
-    @Test
-    void getNotes_Success() throws Exception {
-        // Setup
-        List<NoteVO> expectedNotes = new ArrayList<>();
-        expectedNotes.add(new NoteVO());
-        when(documentationDAO.getNotes(any())).thenReturn(expectedNotes);
-        
-        // Execute
-        List<NoteVO> result = bo.getNotes(input);
-        
-        // Verify
-        assertEquals(1, result.size());
-        verify(documentationDAO).getNotes(input);
-    }
-
-    @Test
-    void getNotes_DAOException() throws Exception {
-        // Setup
-        when(documentationDAO.getNotes(any()))
-            .thenThrow(new DocumentationDAOException("DB error"));
-        
-        // Execute & Verify
-        assertThrows(DocumentationBOException.class, 
-            () -> bo.getNotes(input)
-        );
-    }
-
-    @Test
-    void getAttachments_Success() throws Exception {
-        // Setup
-        List<AttachmentVO> expectedAttachments = new ArrayList<>();
-        expectedAttachments.add(new AttachmentVO());
-        when(documentationDAO.getAttachments(any())).thenReturn(expectedAttachments);
-        
-        // Execute
-        List<AttachmentVO> result = bo.getAttachments(input);
-        
-        // Verify
-        assertEquals(1, result.size());
-        verify(documentationDAO).getAttachments(input);
-    }
-
-    @Test
-    void getAttachments_EmptyResult() throws Exception {
-        // Setup
-        when(documentationDAO.getAttachments(any())).thenReturn(Collections.emptyList());
-        
-        // Execute
-        List<AttachmentVO> result = bo.getAttachments(input);
-        
-        // Verify
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    void getSingleAttachment_Success() throws Exception {
-        // Setup
-        AttachmentVO expected = new AttachmentVO();
-        expected.setFileName("test.pdf");
-        when(documentationDAO.getSingleAttachment(any())).thenReturn(expected);
-        
-        // Execute
-        AttachmentVO result = bo.getSingleAttachment(input);
-        
-        // Verify
-        assertEquals("test.pdf", result.getFileName());
-        verify(documentationDAO).getSingleAttachment(input);
-    }
-
-    @Test
-    void getSingleAttachment_DAOException() throws Exception {
-        // Setup
-        when(documentationDAO.getSingleAttachment(any()))
-            .thenThrow(new DocumentationDAOException("DB error"));
-        
-        // Execute & Verify
-        assertThrows(DocumentationBOException.class, 
-            () -> bo.getSingleAttachment(input)
-        );
-    }
-
-    @Test
-    void getSingleAttachment_NotFound() throws Exception {
-        // Setup
-        when(documentationDAO.getSingleAttachment(any())).thenReturn(null);
-        
-        // Execute
-        AttachmentVO result = bo.getSingleAttachment(input);
-        
-        // Verify
-        assertNull(result);
-    }
-
-    // Edge case: Null input validation
-    @Test
-    void methods_NullInput() {
-        assertAll(
-            () -> assertThrows(NullPointerException.class, () -> bo.addNote(null)),
-            () -> assertThrows(NullPointerException.class, () -> bo.addAttachments(null)),
-            () -> assertThrows(NullPointerException.class, () -> bo.getNotes(null)),
-            () -> assertThrows(NullPointerException.class, () -> bo.getAttachments(null)),
-            () -> assertThrows(NullPointerException.class, () -> bo.getSingleAttachment(null))
-        );
-    }
-}
