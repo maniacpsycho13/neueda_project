@@ -1,24 +1,140 @@
-DocumentationInputVO input = new DocumentationInputVO();
-        input.setAttachmentInternalId(123);
-        input.setSourceDBConnection(false);
-        
-        try (MockedStatic<DocumentationUtil> utilMock = mockStatic(DocumentationUtil.class)) {
-            // Mock dependencies
-            Connection mockConn = mock(Connection.class);
-            PreparedStatement mockStmt = mock(PreparedStatement.class);
-            ResultSet mockRs = mock(ResultSet.class);
-            
-            utilMock.when(() -> DocumentationUtil.getRCMDBConnection(input))
-                    .thenReturn(mockConn);
-            
-            when(mockConn.prepareStatement(anyString())).thenReturn(mockStmt);
-            when(mockStmt.executeQuery()).thenReturn(mockRs);
-            when(mockRs.next()).thenReturn(false);
-            
-            // Force close failure
-            doThrow(new RuntimeException("Close error")).when(mockConn).close();
-            
-            // Execute & Verify
-            assertDoesNotThrow(() -> dao.getSingleAttachment(input));
-        }
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
+import java.lang.reflect.Field;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+public class DocumentationDAOFactoryTest {
+
+    @AfterEach
+    void resetSingleton() throws Exception {
+        // Reset singleton instance before each test
+        Field factoryField = DocumentationDAOFactory.class.getDeclaredField("_documentationDAOFactory");
+        factoryField.setAccessible(true);
+        factoryField.set(null, null);
+        
+        Field daoField = DocumentationDAOFactory.class.getDeclaredField("_documentationDAO");
+        daoField.setAccessible(true);
+        daoField.set(null, null);
+    }
+
+    @Test
+    void getInstance_ShouldReturnSameInstance() {
+        // First call
+        DocumentationDAOFactory instance1 = DocumentationDAOFactory.getInstance();
+        // Second call
+        DocumentationDAOFactory instance2 = DocumentationDAOFactory.getInstance();
+        
+        assertNotNull(instance1);
+        assertSame(instance1, instance2);
+    }
+
+    @Test
+    void getDocumentationDAO_ShouldReturnSameInstance() {
+        DocumentationDAOFactory factory = DocumentationDAOFactory.getInstance();
+        IDocumentationDAO dao1 = factory.getDocumentationDAO();
+        IDocumentationDAO dao2 = factory.getDocumentationDAO();
+        
+        assertNotNull(dao1);
+        assertSame(dao1, dao2);
+    }
+
+    @Test
+    void getDocumentationDAO_ShouldReturnNewImplementation() {
+        IDocumentationDAO dao = DocumentationDAOFactory.getInstance().getDocumentationDAO();
+        assertTrue(dao instanceof DocumentationDAOImpl);
+    }
+
+    @Test
+    void getDocumentationDAO_ShouldCreateOnlyOneInstance() {
+        DocumentationDAOFactory factory = DocumentationDAOFactory.getInstance();
+        factory.getDocumentationDAO();  // First call
+        
+        // Reset DAO instance using reflection
+        try {
+            Field daoField = DocumentationDAOFactory.class.getDeclaredField("_documentationDAO");
+            daoField.setAccessible(true);
+            daoField.set(null, null);
+        } catch (Exception e) {
+            fail("Reflection failed", e);
+        }
+        
+        IDocumentationDAO newDao = factory.getDocumentationDAO();  // Should recreate
+        assertNotNull(newDao);
+    }
+
+    @Test
+    void threadSafety_MultipleThreadsShouldGetSameFactoryInstance() throws InterruptedException {
+        final int threadCount = 100;
+        final ExecutorService service = Executors.newFixedThreadPool(threadCount);
+        final CountDownLatch latch = new CountDownLatch(threadCount);
+        final AtomicReference<DocumentationDAOFactory> firstInstance = new AtomicReference<>();
+        
+        for (int i = 0; i < threadCount; i++) {
+            service.execute(() -> {
+                latch.countDown();
+                try {
+                    latch.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                DocumentationDAOFactory instance = DocumentationDAOFactory.getInstance();
+                if (firstInstance.get() == null) {
+                    firstInstance.set(instance);
+                } else {
+                    assertSame(firstInstance.get(), instance);
+                }
+            });
+        }
+        
+        service.shutdown();
+        assertTrue(service.awaitTermination(10, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void threadSafety_MultipleThreadsShouldGetSameDAOInstance() throws InterruptedException {
+        final int threadCount = 100;
+        final ExecutorService service = Executors.newFixedThreadPool(threadCount);
+        final CountDownLatch latch = new CountDownLatch(threadCount);
+        final AtomicReference<IDocumentationDAO> firstDao = new AtomicReference<>();
+        
+        for (int i = 0; i < threadCount; i++) {
+            service.execute(() -> {
+                latch.countDown();
+                try {
+                    latch.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                IDocumentationDAO dao = DocumentationDAOFactory.getInstance().getDocumentationDAO();
+                if (firstDao.get() == null) {
+                    firstDao.set(dao);
+                } else {
+                    assertSame(firstDao.get(), dao);
+                }
+            });
+        }
+        
+        service.shutdown();
+        assertTrue(service.awaitTermination(10, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void constructor_ShouldBePrivate() throws Exception {
+        Constructor<DocumentationDAOFactory> constructor = DocumentationDAOFactory.class.getDeclaredConstructor();
+        assertFalse(constructor.isAccessible());
+        
+        constructor.setAccessible(true);
+        assertThrows(InvocationTargetException.class, constructor::newInstance);
+    }
+}
