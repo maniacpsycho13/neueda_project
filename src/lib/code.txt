@@ -1,140 +1,236 @@
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import java.lang.reflect.Field;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-public class DocumentationDAOFactoryTest {
+public class DocumentationBOImplTest {
 
-    @AfterEach
-    void resetSingleton() throws Exception {
-        // Reset singleton instance before each test
-        Field factoryField = DocumentationDAOFactory.class.getDeclaredField("_documentationDAOFactory");
-        factoryField.setAccessible(true);
-        factoryField.set(null, null);
-        
-        Field daoField = DocumentationDAOFactory.class.getDeclaredField("_documentationDAO");
-        daoField.setAccessible(true);
-        daoField.set(null, null);
+    @Mock
+    private IDocumentationDAO documentationDAO;
+    
+    @Mock
+    private DocumentationDAOFactory daoFactory;
+    
+    @InjectMocks
+    private DocumentationBOImpl bo;
+    
+    private DocumentationInputVO input;
+
+    @BeforeEach
+    void setUp() {
+        input = new DocumentationInputVO();
+        input.setUserIdentifier("test.user");
+        when(daoFactory.getDocumentationDAO()).thenReturn(documentationDAO);
     }
 
     @Test
-    void getInstance_ShouldReturnSameInstance() {
-        // First call
-        DocumentationDAOFactory instance1 = DocumentationDAOFactory.getInstance();
-        // Second call
-        DocumentationDAOFactory instance2 = DocumentationDAOFactory.getInstance();
+    void addNote_Success() throws Exception {
+        // Setup
+        input.setUserInternalId(null);
+        when(documentationDAO.getUserInternalId(any())).thenReturn(100);
+        when(documentationDAO.addNote(any())).thenReturn(true);
         
-        assertNotNull(instance1);
-        assertSame(instance1, instance2);
+        // Execute
+        Boolean result = bo.addNote(input);
+        
+        // Verify
+        assertTrue(result);
+        assertEquals(100, input.getUserInternalId());
+        verify(documentationDAO).getUserInternalId(input);
+        verify(documentationDAO).addNote(input);
     }
 
     @Test
-    void getDocumentationDAO_ShouldReturnSameInstance() {
-        DocumentationDAOFactory factory = DocumentationDAOFactory.getInstance();
-        IDocumentationDAO dao1 = factory.getDocumentationDAO();
-        IDocumentationDAO dao2 = factory.getDocumentationDAO();
+    void addNote_UserInternalIdAlreadySet() throws Exception {
+        // Setup
+        input.setUserInternalId(200);  // Pre-set ID
+        when(documentationDAO.addNote(any())).thenReturn(true);
         
-        assertNotNull(dao1);
-        assertSame(dao1, dao2);
+        // Execute
+        Boolean result = bo.addNote(input);
+        
+        // Verify
+        assertTrue(result);
+        assertEquals(200, input.getUserInternalId());
+        verify(documentationDAO, never()).getUserInternalId(any());
+        verify(documentationDAO).addNote(input);
     }
 
     @Test
-    void getDocumentationDAO_ShouldReturnNewImplementation() {
-        IDocumentationDAO dao = DocumentationDAOFactory.getInstance().getDocumentationDAO();
-        assertTrue(dao instanceof DocumentationDAOImpl);
+    void addNote_DAOException() throws Exception {
+        // Setup
+        when(documentationDAO.getUserInternalId(any()))
+            .thenThrow(new DocumentationDAOException("DB error"));
+        
+        // Execute & Verify
+        assertThrows(DocumentationBOException.class, 
+            () -> bo.addNote(input)
+        );
     }
 
     @Test
-    void getDocumentationDAO_ShouldCreateOnlyOneInstance() {
-        DocumentationDAOFactory factory = DocumentationDAOFactory.getInstance();
-        factory.getDocumentationDAO();  // First call
+    void addAttachments_Success() throws Exception {
+        // Setup
+        List<DocumentationInputVO> inputList = new ArrayList<>();
+        inputList.add(input);
+        inputList.add(new DocumentationInputVO());
         
-        // Reset DAO instance using reflection
-        try {
-            Field daoField = DocumentationDAOFactory.class.getDeclaredField("_documentationDAO");
-            daoField.setAccessible(true);
-            daoField.set(null, null);
-        } catch (Exception e) {
-            fail("Reflection failed", e);
-        }
+        when(documentationDAO.getUserInternalId(any())).thenReturn(100);
+        when(documentationDAO.addAttachment(any())).thenReturn(true);
         
-        IDocumentationDAO newDao = factory.getDocumentationDAO();  // Should recreate
-        assertNotNull(newDao);
+        // Execute
+        Boolean result = bo.addAttachments(inputList);
+        
+        // Verify
+        assertTrue(result);
+        verify(documentationDAO, times(2)).getUserInternalId(any());
+        verify(documentationDAO, times(2)).addAttachment(any());
     }
 
     @Test
-    void threadSafety_MultipleThreadsShouldGetSameFactoryInstance() throws InterruptedException {
-        final int threadCount = 100;
-        final ExecutorService service = Executors.newFixedThreadPool(threadCount);
-        final CountDownLatch latch = new CountDownLatch(threadCount);
-        final AtomicReference<DocumentationDAOFactory> firstInstance = new AtomicReference<>();
+    void addAttachments_EmptyList() throws Exception {
+        // Execute
+        Boolean result = bo.addAttachments(Collections.emptyList());
         
-        for (int i = 0; i < threadCount; i++) {
-            service.execute(() -> {
-                latch.countDown();
-                try {
-                    latch.await();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                DocumentationDAOFactory instance = DocumentationDAOFactory.getInstance();
-                if (firstInstance.get() == null) {
-                    firstInstance.set(instance);
-                } else {
-                    assertSame(firstInstance.get(), instance);
-                }
-            });
-        }
-        
-        service.shutdown();
-        assertTrue(service.awaitTermination(10, TimeUnit.SECONDS));
+        // Verify
+        assertFalse(result);
+        verify(documentationDAO, never()).getUserInternalId(any());
+        verify(documentationDAO, never()).addAttachment(any());
     }
 
     @Test
-    void threadSafety_MultipleThreadsShouldGetSameDAOInstance() throws InterruptedException {
-        final int threadCount = 100;
-        final ExecutorService service = Executors.newFixedThreadPool(threadCount);
-        final CountDownLatch latch = new CountDownLatch(threadCount);
-        final AtomicReference<IDocumentationDAO> firstDao = new AtomicReference<>();
+    void addAttachments_PartialFailure() throws Exception {
+        // Setup
+        List<DocumentationInputVO> inputList = new ArrayList<>();
+        inputList.add(input);  // Success
+        DocumentationInputVO input2 = new DocumentationInputVO();
+        inputList.add(input2); // Failure
         
-        for (int i = 0; i < threadCount; i++) {
-            service.execute(() -> {
-                latch.countDown();
-                try {
-                    latch.await();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                IDocumentationDAO dao = DocumentationDAOFactory.getInstance().getDocumentationDAO();
-                if (firstDao.get() == null) {
-                    firstDao.set(dao);
-                } else {
-                    assertSame(firstDao.get(), dao);
-                }
-            });
-        }
+        when(documentationDAO.getUserInternalId(any()))
+            .thenReturn(100)    // First call success
+            .thenThrow(new DocumentationDAOException("DB error")); // Second call fails
         
-        service.shutdown();
-        assertTrue(service.awaitTermination(10, TimeUnit.SECONDS));
+        // Execute & Verify
+        assertThrows(DocumentationBOException.class, 
+            () -> bo.addAttachments(inputList)
+        );
+        verify(documentationDAO).getUserInternalId(input);
+        verify(documentationDAO, never()).addAttachment(any());
     }
 
     @Test
-    void constructor_ShouldBePrivate() throws Exception {
-        Constructor<DocumentationDAOFactory> constructor = DocumentationDAOFactory.class.getDeclaredConstructor();
-        assertFalse(constructor.isAccessible());
+    void getNotes_Success() throws Exception {
+        // Setup
+        List<NoteVO> expectedNotes = new ArrayList<>();
+        expectedNotes.add(new NoteVO());
+        when(documentationDAO.getNotes(any())).thenReturn(expectedNotes);
         
-        constructor.setAccessible(true);
-        assertThrows(InvocationTargetException.class, constructor::newInstance);
+        // Execute
+        List<NoteVO> result = bo.getNotes(input);
+        
+        // Verify
+        assertEquals(1, result.size());
+        verify(documentationDAO).getNotes(input);
+    }
+
+    @Test
+    void getNotes_DAOException() throws Exception {
+        // Setup
+        when(documentationDAO.getNotes(any()))
+            .thenThrow(new DocumentationDAOException("DB error"));
+        
+        // Execute & Verify
+        assertThrows(DocumentationBOException.class, 
+            () -> bo.getNotes(input)
+        );
+    }
+
+    @Test
+    void getAttachments_Success() throws Exception {
+        // Setup
+        List<AttachmentVO> expectedAttachments = new ArrayList<>();
+        expectedAttachments.add(new AttachmentVO());
+        when(documentationDAO.getAttachments(any())).thenReturn(expectedAttachments);
+        
+        // Execute
+        List<AttachmentVO> result = bo.getAttachments(input);
+        
+        // Verify
+        assertEquals(1, result.size());
+        verify(documentationDAO).getAttachments(input);
+    }
+
+    @Test
+    void getAttachments_EmptyResult() throws Exception {
+        // Setup
+        when(documentationDAO.getAttachments(any())).thenReturn(Collections.emptyList());
+        
+        // Execute
+        List<AttachmentVO> result = bo.getAttachments(input);
+        
+        // Verify
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void getSingleAttachment_Success() throws Exception {
+        // Setup
+        AttachmentVO expected = new AttachmentVO();
+        expected.setFileName("test.pdf");
+        when(documentationDAO.getSingleAttachment(any())).thenReturn(expected);
+        
+        // Execute
+        AttachmentVO result = bo.getSingleAttachment(input);
+        
+        // Verify
+        assertEquals("test.pdf", result.getFileName());
+        verify(documentationDAO).getSingleAttachment(input);
+    }
+
+    @Test
+    void getSingleAttachment_DAOException() throws Exception {
+        // Setup
+        when(documentationDAO.getSingleAttachment(any()))
+            .thenThrow(new DocumentationDAOException("DB error"));
+        
+        // Execute & Verify
+        assertThrows(DocumentationBOException.class, 
+            () -> bo.getSingleAttachment(input)
+        );
+    }
+
+    @Test
+    void getSingleAttachment_NotFound() throws Exception {
+        // Setup
+        when(documentationDAO.getSingleAttachment(any())).thenReturn(null);
+        
+        // Execute
+        AttachmentVO result = bo.getSingleAttachment(input);
+        
+        // Verify
+        assertNull(result);
+    }
+
+    // Edge case: Null input validation
+    @Test
+    void methods_NullInput() {
+        assertAll(
+            () -> assertThrows(NullPointerException.class, () -> bo.addNote(null)),
+            () -> assertThrows(NullPointerException.class, () -> bo.addAttachments(null)),
+            () -> assertThrows(NullPointerException.class, () -> bo.getNotes(null)),
+            () -> assertThrows(NullPointerException.class, () -> bo.getAttachments(null)),
+            () -> assertThrows(NullPointerException.class, () -> bo.getSingleAttachment(null))
+        );
     }
 }
