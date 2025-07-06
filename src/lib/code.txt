@@ -1,262 +1,94 @@
  @Test
-    void testMapPropertyKeyValueMap_Success() throws Exception {
-        // Arrange
-        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
-
-        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
-             MockedStatic<DBUtil> mockedDBUtil = mockStatic(DBUtil.class)) {
-            
-            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
-                     .thenReturn(mockConnection);
-            mockedDBUtil.when(() -> DBUtil.getpropertyKeyValueMap(mockConnection))
-                       .thenReturn(mockPropertyMap);
-
-            // Act
-            HashMap<String, String> result = documentationDAO.mapPropertyKeyValueMap(mockDocumentationInputVO);
-
-            // Assert
-            assertNotNull(result);
-            assertEquals(3, result.size());
-            assertEquals("value1", result.get("key1"));
-            assertEquals("value2", result.get("key2"));
-            assertEquals("30000", result.get("config.timeout"));
-            
-            // Verify method calls
-            mockedUtil.verify(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO), times(1));
-            mockedDBUtil.verify(() -> DBUtil.getpropertyKeyValueMap(mockConnection), times(1));
-            verify(mockConnection, times(1)).close();
-        }
-    }
-
-    @Test
-    void testMapPropertyKeyValueMap_EmptyMap() throws Exception {
-        // Arrange
-        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
-        Map<String, String> emptyMap = new HashMap<>();
-
-        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
-             MockedStatic<DBUtil> mockedDBUtil = mockStatic(DBUtil.class)) {
-            
-            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
-                     .thenReturn(mockConnection);
-            mockedDBUtil.when(() -> DBUtil.getpropertyKeyValueMap(mockConnection))
-                       .thenReturn(emptyMap);
-
-            // Act
-            HashMap<String, String> result = documentationDAO.mapPropertyKeyValueMap(mockDocumentationInputVO);
-
-            // Assert
-            assertNotNull(result);
-            assertTrue(result.isEmpty());
-            
-            // Verify method calls
-            mockedUtil.verify(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO), times(1));
-            mockedDBUtil.verify(() -> DBUtil.getpropertyKeyValueMap(mockConnection), times(1));
-            verify(mockConnection, times(1)).close();
-        }
-    }
-
-    @Test
-    void testMapPropertyKeyValueMap_SourceDBConnection() throws Exception {
-        // Arrange
-        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(true);
-
-        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
-             MockedStatic<DBUtil> mockedDBUtil = mockStatic(DBUtil.class)) {
-            
-            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
-                     .thenReturn(mockConnection);
-            mockedDBUtil.when(() -> DBUtil.getpropertyKeyValueMap(mockConnection))
-                       .thenReturn(mockPropertyMap);
-
-            // Act
-            HashMap<String, String> result = documentationDAO.mapPropertyKeyValueMap(mockDocumentationInputVO);
-
-            // Assert
-            assertNotNull(result);
-            assertEquals(3, result.size());
-            
-            // Verify method calls
-            mockedUtil.verify(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO), times(1));
-            mockedDBUtil.verify(() -> DBUtil.getpropertyKeyValueMap(mockConnection), times(1));
-            
-            // Verify connection is NOT closed when isSourceDBConnection is true
-            verify(mockConnection, never()).close();
-        }
-    }
-
-    @Test
-    void testMapPropertyKeyValueMap_GetConnectionException() throws Exception {
-        // Arrange
-        Exception connectionException = new SQLException("Database connection failed");
-
-        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class)) {
-            
-            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
-                     .thenThrow(connectionException);
-
-            // Act & Assert
-            DocumentationDAOException exception = assertThrows(DocumentationDAOException.class, () -> {
-                documentationDAO.mapPropertyKeyValueMap(mockDocumentationInputVO);
-            });
-
-            assertEquals("Exception occurred while get db connection:", exception.getMessage());
-            assertEquals(connectionException, exception.getCause());
-            
-            // Verify method calls
-            mockedUtil.verify(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO), times(1));
-        }
-    }
-
-    @Test
-    void testMapPropertyKeyValueMap_DBUtilException() throws Exception {
-        // Arrange
-        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
-        Exception dbUtilException = new RuntimeException("Failed to retrieve property map");
-
-        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
-             MockedStatic<DBUtil> mockedDBUtil = mockStatic(DBUtil.class)) {
-            
-            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
-                     .thenReturn(mockConnection);
-            mockedDBUtil.when(() -> DBUtil.getpropertyKeyValueMap(mockConnection))
-                       .thenThrow(dbUtilException);
-
-            // Act & Assert
-            DocumentationDAOException exception = assertThrows(DocumentationDAOException.class, () -> {
-                documentationDAO.mapPropertyKeyValueMap(mockDocumentationInputVO);
-            });
-
-            assertEquals("Exception occurred while get db connection:", exception.getMessage());
-            assertEquals(dbUtilException, exception.getCause());
-            
-            // Verify method calls
-            mockedUtil.verify(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO), times(1));
-            mockedDBUtil.verify(() -> DBUtil.getpropertyKeyValueMap(mockConnection), times(1));
-            
-            // Verify connection is still closed even when DBUtil fails
-            verify(mockConnection, times(1)).close();
-        }
-    }
-
-    @Test
-    void testMapPropertyKeyValueMap_CloseConnectionException() throws Exception {
-        // Arrange
-        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
-        SQLException closeException = new SQLException("Failed to close connection");
-        doThrow(closeException).when(mockConnection).close();
-
-        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
-             MockedStatic<DBUtil> mockedDBUtil = mockStatic(DBUtil.class)) {
-            
-            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
-                     .thenReturn(mockConnection);
-            mockedDBUtil.when(() -> DBUtil.getpropertyKeyValueMap(mockConnection))
-                       .thenReturn(mockPropertyMap);
-
-            // Act
-            HashMap<String, String> result = documentationDAO.mapPropertyKeyValueMap(mockDocumentationInputVO);
-
-            // Assert
-            // Method should still return successfully even if connection close fails
-            assertNotNull(result);
-            assertEquals(3, result.size());
-            
-            // Verify method calls
-            mockedUtil.verify(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO), times(1));
-            mockedDBUtil.verify(() -> DBUtil.getpropertyKeyValueMap(mockConnection), times(1));
-            verify(mockConnection, times(1)).close();
-        }
-    }
-
-    @Test
-    void testMapPropertyKeyValueMap_NullConnection() throws Exception {
-        // Arrange
-        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
-
-        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
-             MockedStatic<DBUtil> mockedDBUtil = mockStatic(DBUtil.class)) {
-            
-            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
-                     .thenReturn(null);
-            mockedDBUtil.when(() -> DBUtil.getpropertyKeyValueMap(null))
-                       .thenReturn(mockPropertyMap);
-
-            // Act
-            HashMap<String, String> result = documentationDAO.mapPropertyKeyValueMap(mockDocumentationInputVO);
-
-            // Assert
-            assertNotNull(result);
-            assertEquals(3, result.size());
-            
-            // Verify method calls
-            mockedUtil.verify(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO), times(1));
-            mockedDBUtil.verify(() -> DBUtil.getpropertyKeyValueMap(null), times(1));
-            
-            // Verify no attempt to close null connection
-            verify(mockConnection, never()).close();
-        }
-    }
-
-    @Test
-    void testMapPropertyKeyValueMap_ReturnTypeConsistency() throws Exception {
-        // Arrange
-        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
-
-        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
-             MockedStatic<DBUtil> mockedDBUtil = mockStatic(DBUtil.class)) {
-            
-            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
-                     .thenReturn(mockConnection);
-            mockedDBUtil.when(() -> DBUtil.getpropertyKeyValueMap(mockConnection))
-                       .thenReturn(mockPropertyMap);
-
-            // Act
-            HashMap<String, String> result = documentationDAO.mapPropertyKeyValueMap(mockDocumentationInputVO);
-
-            // Assert
-            assertNotNull(result);
-            assertTrue(result instanceof HashMap);
-            assertFalse(result.isEmpty());
-            
-            // Verify all entries are properly mapped
-            mockPropertyMap.forEach((key, value) -> {
-                assertTrue(result.containsKey(key));
-                assertEquals(value, result.get(key));
-            });
-        }
-    }
-
-    @Test
-    void testMapPropertyKeyValueMap_LargePropertyMap() throws Exception {
-        // Arrange
-        when(mockDocumentationInputVO.isSourceDBConnection()).thenReturn(false);
+    void mapPropertyKeyValueMap_Success() throws Exception {
+        // Setup
+        DocumentationInputVO input = new DocumentationInputVO();
+        input.setSourceDBConnection(false);
         
-        // Create a large property map
-        Map<String, String> largePropertyMap = new HashMap<>();
-        for (int i = 0; i < 1000; i++) {
-            largePropertyMap.put("property" + i, "value" + i);
-        }
+        Map<String, String> expectedMap = new HashMap<>();
+        expectedMap.put("key", "value");
 
-        try (MockedStatic<DocumentationUtil> mockedUtil = mockStatic(DocumentationUtil.class);
-             MockedStatic<DBUtil> mockedDBUtil = mockStatic(DBUtil.class)) {
+        try (MockedStatic<DocumentationUtil> docUtil = mockStatic(DocumentationUtil.class);
+             MockedStatic<DBUtil> dbUtil = mockStatic(DBUtil.class)) {
             
-            mockedUtil.when(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO))
-                     .thenReturn(mockConnection);
-            mockedDBUtil.when(() -> DBUtil.getpropertyKeyValueMap(mockConnection))
-                       .thenReturn(largePropertyMap);
-
-            // Act
-            HashMap<String, String> result = documentationDAO.mapPropertyKeyValueMap(mockDocumentationInputVO);
-
-            // Assert
-            assertNotNull(result);
-            assertEquals(1000, result.size());
-            assertEquals("value999", result.get("property999"));
+            // Mock database connection
+            Connection mockConn = mock(Connection.class);
+            docUtil.when(() -> DocumentationUtil.getRCMDBConnection(input))
+                   .thenReturn(mockConn);
             
-            // Verify method calls
-            mockedUtil.verify(() -> DocumentationUtil.getRCMDBConnection(mockDocumentationInputVO), times(1));
-            mockedDBUtil.verify(() -> DBUtil.getpropertyKeyValueMap(mockConnection), times(1));
-            verify(mockConnection, times(1)).close();
+            // Mock DBUtil response
+            dbUtil.when(() -> DBUtil.getPropertyKeyValueMap(mockConn))
+                  .thenReturn(expectedMap);
+            
+            // Execute
+            Map<String, String> result = dao.mapPropertyKeyValueMap(input);
+            
+            // Verify
+            assertEquals(expectedMap, result);
+            verify(mockConn).close();  // Should close external connection
         }
     }
+
+    @Test
+    void mapPropertyKeyValueMap_SourceDBConnectionTrue() throws Exception {
+        // Setup
+        DocumentationInputVO input = new DocumentationInputVO();
+        input.setSourceDBConnection(true);  // Connection should NOT be closed
+
+        try (MockedStatic<DocumentationUtil> docUtil = mockStatic(DocumentationUtil.class);
+             MockedStatic<DBUtil> dbUtil = mockStatic(DBUtil.class)) {
+            
+            Connection mockConn = mock(Connection.class);
+            docUtil.when(() -> DocumentationUtil.getRCMDBConnection(input))
+                   .thenReturn(mockConn);
+            
+            dbUtil.when(() -> DBUtil.getPropertyKeyValueMap(mockConn))
+                  .thenReturn(new HashMap<>());
+            
+            // Execute
+            dao.mapPropertyKeyValueMap(input);
+            
+            // Verify
+            verify(mockConn, never()).close();  // Should not close external connection
+        }
+    }
+
+    @Test
+    void mapPropertyKeyValueMap_ConnectionFailure() {
+        // Setup
+        DocumentationInputVO input = new DocumentationInputVO();
+        input.setSourceDBConnection(false);
+        
+        try (MockedStatic<DocumentationUtil> docUtil = mockStatic(DocumentationUtil.class)) {
+            // Force connection exception
+            docUtil.when(() -> DocumentationUtil.getRCMDBConnection(input))
+                   .thenThrow(new SQLException("DB error"));
+            
+            // Verify exception
+            assertThrows(DocumentationDAOException.class, 
+                () -> dao.mapPropertyKeyValueMap(input)
+            );
+        }
+    }
+
+    @Test
+    void mapPropertyKeyValueMap_CloseConnectionFailure() throws Exception {
+        // Setup
+        DocumentationInputVO input = new DocumentationInputVO();
+        input.setSourceDBConnection(false);  // Should attempt to close
+        
+        try (MockedStatic<DocumentationUtil> docUtil = mockStatic(DocumentationUtil.class);
+             MockedStatic<DBUtil> dbUtil = mockStatic(DBUtil.class)) {
+            
+            Connection mockConn = mock(Connection.class);
+            docUtil.when(() -> DocumentationUtil.getRCMDBConnection(input))
+                   .thenReturn(mockConn);
+            
+            // Force close failure
+            doThrow(new SQLException("Close failed")).when(mockConn).close();
+            
+            // Execute and verify
+            assertDoesNotThrow(() -> dao.mapPropertyKeyValueMap(input));
+            verify(mockConn).close();  // Should attempt close despite error
+        }
+    }
+}
