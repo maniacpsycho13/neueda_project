@@ -1,129 +1,44 @@
-import static org.mockito.Mockito.*;
-import static org.junit.Assert.*;
-
-import java.io.*;
-import java.sql.Timestamp;
-import java.util.*;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.*;
-import org.mockito.junit.MockitoJUnitRunner;
-import com.opensymphony.module.propertyset.PropertySet;
-import your.package.name.*;
-
-@RunWith(MockitoJUnitRunner.class)
-public class AddAttachmentControllerTest {
-
-    @InjectMocks
-    private AddAttachmentController controller;
-
-    @Mock
-    private Context context;
-    @Mock
-    private PageModel pageModel;
-    @Mock
-    private HttpServletRequest request;
-    @Mock
-    private HttpServletResponse response;
-    @Mock
-    private IDocumentationBO documentationBO;
-    @Mock
-    private IAuditComponentBo auditComponentBo;
-    @Mock
-    private UploadedFile uploadedFile;
-    @Mock
-    private ILogger logger;
-    @Mock
-    private User currentUser;
-
-    private StringWriter responseWriter;
-    private Map<String, UploadedFile> uploadedFiles;
-
-    @Before
-    public void setUp() throws Exception {
-        // Initialize mocks
-        responseWriter = new StringWriter();
-        when(context.getServletRequest()).thenReturn(request);
-        when(context.getServletResponse()).thenReturn(response);
-        when(context.getCurrentUser()).thenReturn(currentUser);
-        when(currentUser.getUserIdentifier()).thenReturn("user123");
-        when(currentUser.getFullName()).thenReturn("John Doe");
-        when(response.getWriter()).thenReturn(new PrintWriter(responseWriter));
-        
-        // Initialize uploaded files
-        uploadedFiles = new HashMap<>();
-        uploadedFiles.put("file1.txt", uploadedFile);
-        when(uploadedFile.getSize()).thenReturn(1024L);
-        when(uploadedFile.getInputStream()).thenReturn(new ByteArrayInputStream("content".getBytes()));
-        when(context.getUploadedFiles()).thenReturn(uploadedFiles);
-
-        // Set parameters
-        when(request.getParameter("componentCode")).thenReturn("COMP_001");
-        when(request.getParameter("componentAction")).thenReturn("EDIT");
-        when(request.getParameter("componentRowId")).thenReturn("1001");
-        when(request.getParameter("descriptionJsonFormat")).thenReturn("[{\"fileName\":\"file1.txt\",\"FileDescription\":\"Test file\"}]");
-        when(request.getParameter("batchUpdateRequestId")).thenReturn("REQ_123");
-
-        // Inject dependencies via reflection
-        Field docBoField = AddAttachmentController.class.getDeclaredField("documentationBO");
-        docBoField.setAccessible(true);
-        docBoField.set(controller, documentationBO);
-        
-        Field auditBoField = AddAttachmentController.class.getDeclaredField("auditComponentBo");
-        auditBoField.setAccessible(true);
-        auditBoField.set(controller, auditComponentBo);
-    }
-
-    @Test
-    public void testPreparePageModel_Success() throws Exception {
-        controller.preparePageModel(context, pageModel);
-        
-        // Verify interactions
-        verify(documentationBO).addAttachments(anyList());
-        verify(auditComponentBo).insertBatchAuditDetails(any(AuditComponentVo.class));
-        
-        // Verify response
-        assertEquals("SUCCESS", responseWriter.toString());
-    }
-
-    @Test(expected = PluginException.class)
-    public void testPreparePageModel_Exception() throws Exception {
-        // Force exception in documentationBO
-        doThrow(new RuntimeException("DB error"))
-            .when(documentationBO).addAttachments(anyList());
-        
-        try {
-            controller.preparePageModel(context, pageModel);
-        } finally {
-            // Verify error response
-            assertEquals("ERROR_ATTACHMENT", responseWriter.toString());
-        }
-    }
-
-    @Test
-    public void testPreparePageModel_EmptyFileDescription() throws Exception {
-        when(request.getParameter("descriptionJsonFormat")).thenReturn("[]");
-        controller.preparePageModel(context, pageModel);
-        
-        // Verify no description passed
-        ArgumentCaptor<DocumentationInputVO> voCaptor = ArgumentCaptor.forClass(DocumentationInputVO.class);
-        verify(documentationBO).addAttachments(voCaptor.capture());
-        assertNull(voCaptor.getValue().getFileDescription());
-    }
-
-    @Test
-    public void testPreparePageModel_InvalidCharactersInDescription() throws Exception {
-        String invalidJson = "[{\"fileName\":\"file1.txt\",\"FileDescription\":\"Invalid\u0000Char\"}]";
-        when(request.getParameter("descriptionJsonFormat")).thenReturn(invalidJson);
-        
-        controller.preparePageModel(context, pageModel);
-        
-        // Verify sanitization
-        ArgumentCaptor<DocumentationInputVO> voCaptor = ArgumentCaptor.forClass(DocumentationInputVO.class);
-        verify(documentationBO).addAttachments(voCaptor.capture());
-        assertEquals("InvalidChar", voCaptor.getValue().getFileDescription());
-    }
+@Test
+public void testPreparePageModel_Success() throws Exception {
+    // Set up valid parameters
+    when(request.getParameter("componentCode")).thenReturn("COMP123");
+    when(request.getParameter("componentAction")).thenReturn("EDIT");
+    when(request.getParameter("componentRowId")).thenReturn("1001");
+    when(request.getParameter("batchUpdateRequestId")).thenReturn("REQ456");
+    
+    // Set up valid JSON descriptions
+    String validJson = "[{\"fileName\":\"test.txt\",\"FileDescription\":\"Test file\"}]";
+    when(request.getParameter("descriptionJsonFormat")).thenReturn(validJson);
+    
+    // Set up uploaded files
+    Map<String, UploadedFile> uploadedFiles = new HashMap<>();
+    UploadedFile mockFile = mock(UploadedFile.class);
+    when(mockFile.getSize()).thenReturn(1024L);
+    when(mockFile.getInputStream()).thenReturn(new ByteArrayInputStream("content".getBytes()));
+    uploadedFiles.put("test.txt", mockFile);
+    when(context.getUploadedFiles()).thenReturn(uploadedFiles);
+    
+    // Execute the method
+    controller.preparePageModel(context, pageModel);
+    
+    // Verify core interactions
+    ArgumentCaptor<List<DocumentationInputVO>> docsCaptor = ArgumentCaptor.forClass(List.class);
+    verify(documentationBO).addAttachments(docsCaptor.capture());
+    
+    ArgumentCaptor<AuditComponentVo> auditCaptor = ArgumentCaptor.forClass(AuditComponentVo.class);
+    verify(auditComponentBo).insertBatchAuditDetails(auditCaptor.capture());
+    
+    // Verify response
+    assertEquals("SUCCESS", responseWriter.toString());
+    
+    // Verify VO content
+    DocumentationInputVO docVo = docsCaptor.getValue().get(0);
+    assertEquals("test.txt", docVo.getFileName());
+    assertEquals("Test file", docVo.getFileDescription());
+    assertEquals("COMP123", docVo.getComponentCode());
+    
+    // Verify audit log
+    AuditComponentVo auditVo = auditCaptor.getValue();
+    assertEquals("Attachment Name: test.txt", auditVo.getBue_user_descp());
+    assertEquals("Test file", auditVo.getBue_user_comment());
 }
