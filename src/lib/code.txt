@@ -1,58 +1,19 @@
-@Test
-public void testPreparePageModel_Success() throws Exception {
-    AddAttachmentController controller = new AddAttachmentController();
+UploadedFile mockFile = mock(UploadedFile.class);
+when(mockFile.getSize()).thenReturn(1024L);
+when(mockFile.getInputStream()).thenReturn(new ByteArrayInputStream("file-content".getBytes()));
 
-    // Mocks
-    Context context = mock(Context.class);
-    PageModel pageModel = mock(PageModel.class);
-    HttpServletRequest request = mock(HttpServletRequest.class);
-    HttpServletResponse response = mock(HttpServletResponse.class);
-    PrintWriter writer = new PrintWriter(new StringWriter());
+Map<String, UploadedFile> uploadedFiles = new HashMap<>();
+uploadedFiles.put("test.txt", mockFile);
 
-    // Inject mocks into controller
-    FieldUtils.writeField(controller, "documentationBO", mock(IDocumentationBO.class), true);
-    FieldUtils.writeField(controller, "auditComponentBo", mock(IAuditComponentBo.class), true);
+when(context.getUploadedFiles()).thenReturn(uploadedFiles);
 
-    // Setup request parameters
-    when(context.getServletRequest()).thenReturn(request);
-    when(request.getParameter("componentCode")).thenReturn("COMP123");
-    when(request.getParameter("componentAction")).thenReturn("EDIT");
-    when(request.getParameter("componentRowId")).thenReturn("1001");
-    when(request.getParameter("batchUpdateRequestId")).thenReturn("REQ456");
 
-    // Setup JSON parameter
-    String json = "[{\"fileName\":\"test.txt\",\"FileDescription\":\"Test File Description\"}]";
-    when(request.getParameter("descriptionJsonFormat")).thenReturn(json);
 
-    // Uploaded File
-    UploadedFile file = mock(UploadedFile.class);
-    when(file.getSize()).thenReturn(1024L);
-    when(file.getInputStream()).thenReturn(new ByteArrayInputStream("dummy-content".getBytes()));
 
-    Map<String, UploadedFile> uploadedFiles = new HashMap<>();
-    uploadedFiles.put("test.txt", file);
-    when(context.getUploadedFiles()).thenReturn(uploadedFiles);
 
-    // User Details
-    User mockUser = mock(User.class);
-    when(mockUser.getUserIdentifier()).thenReturn("user123");
-    when(mockUser.getFullName()).thenReturn("Pari Ullu");
-    when(context.getCurrentUser()).thenReturn(mockUser);
 
-    // Setup response writer
-    when(context.getServletResponse()).thenReturn(response);
-    StringWriter stringWriter = new StringWriter();
-    PrintWriter printWriter = new PrintWriter(stringWriter);
-    when(response.getWriter()).thenReturn(printWriter);
-
-    // Call the method
-    controller.preparePageModel(context, pageModel);
-
-    // Flush and assert the output
-    printWriter.flush();
-    assertEquals("SUCCESS", stringWriter.toString());
-
-    // Optional: Verify interactions
-    verify(context, times(1)).getUploadedFiles();
-    verify(context.getCurrentUser(), atLeastOnce()).getUserIdentifier();
-}
+String validJson = "[" +
+    "{\"fileName\":\"ignored.txt\",\"FileDescription\":\"Ignore this\"}," +
+    "{\"fileName\":\"test.txt\",\"FileDescription\":\"Test file\"}" +
+"]";
+when(request.getParameter("descriptionJsonFormat")).thenReturn(validJson);
