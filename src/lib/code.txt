@@ -1,124 +1,234 @@
-import static org.junit.Assert.*;
+package com.example.controller;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
 
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.plugin.PluginException;
-import com.plugin.context.Context;
-import com.plugin.controller.PageController;
-import com.plugin.controller.PageModel;
-import com.plugin.logging.ILogger;
-import com.plugin.logging.LoggerFactory;
-import com.plugin.properties.PluginProperties;
+import com.example.context.Context;
+import com.example.model.PageModel;
+import com.example.exception.PluginException;
+import com.example.properties.PluginProperties;
+import com.example.constants.CustomBatchUpdateConstants;
+import com.example.logging.ILogger;
+import com.example.logging.LoggerFactory;
 
-@RunWith(PowerMockRunner.class)
-@PrepareForTest({LoggerFactory.class, PluginProperties.class})
-public class CustomBatchSearchPageControllerTest {
+@ExtendWith(MockitoExtension.class)
+class CustomBatchSearchPageControllerTest {
 
     @Mock
-    private Context context;
+    private Context mockContext;
     
     @Mock
-    private PageModel pageModel;
+    private PageModel mockPageModel;
     
     @Mock
-    private HttpServletRequest request;
+    private HttpServletRequest mockServletRequest;
     
     @Mock
-    private ILogger logger;
+    private ILogger mockLogger;
     
     @InjectMocks
     private CustomBatchSearchPageController controller;
-
-    @Before
-    public void setUp() {
-        PowerMockito.mockStatic(LoggerFactory.class, PluginProperties.class);
-        when(LoggerFactory.getLogger(CustomBatchSearchPageController.class)).thenReturn(logger);
-        when(context.getServletRequest()).thenReturn(request);
-        MockitoAnnotations.initMocks(this);
+    
+    @BeforeEach
+    void setUp() {
+        // Mock static logger factory
+        try (MockedStatic<LoggerFactory> loggerFactory = mockStatic(LoggerFactory.class)) {
+            loggerFactory.when(() -> LoggerFactory.getLogger(CustomBatchSearchPageController.class))
+                        .thenReturn(mockLogger);
+        }
     }
-
-    // Tests for getPageLocation()
+    
     @Test
-    public void getPageLocation_returnsNull_whenEntitlementInfoPresent() {
-        when(request.getParameter("entitlementInfo")).thenReturn("test-value");
-        assertNull(controller.getPageLocation(context));
-        verify(logger).debug("CustomBatchSearchPageController getPageLocation method started");
-        verify(logger).debug("CustomBatch SearchPageController: getPageLocation entitlementInfo method");
-    }
-
-    @Test
-    public void getPageLocation_returnsScreenPath_whenEntitlementInfoAbsent() {
-        when(request.getParameter("entitlementInfo")).thenReturn(null);
-        assertEquals("BatchUpdateSearchScreen.vtl", controller.getPageLocation(context));
-        verify(logger).debug("CustomBatchSearchPageController getPageLocation method started");
-    }
-
-    @Test
-    public void getPageLocation_returnsScreenPath_whenEntitlementInfoEmpty() {
-        when(request.getParameter("entitlementInfo")).thenReturn("");
-        assertEquals("BatchUpdateSearchScreen.vtl", controller.getPageLocation(context));
-        verify(logger).debug("CustomBatchSearchPageController getPageLocation method started");
-    }
-
-    // Tests for handleSubmit()
-    @Test
-    public void handleSubmit_logsDebugMessage() throws PluginException {
-        controller.handleSubmit(context, pageModel);
-        verify(logger).debug("CustomBatchSearchPageController handleSubmit method");
-    }
-
-    // Tests for preparePageModel()
-    @Test
-    public void preparePageModel_setsPropertiesAndForwards() throws PluginException {
-        // Setup
-        String testVfsPath = "/test/path";
-        when(PluginProperties.getPropertyValue("vfsPath")).thenReturn(testVfsPath);
+    void testGetPageLocation_WithNullEntitlementInfo_ReturnsVtlPage() {
+        // Given
+        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
+        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn(null);
         
-        // Execute
-        controller.preparePageModel(context, pageModel);
+        // When
+        String result = controller.getPageLocation(mockContext);
         
-        // Verify
-        verify(logger).debug("CustomBatchSearchPageController: entitlementInfo");
-        verify(context).forward(
-            CustomBatchUpdateConstants.USER_ENTITLEMENT,
-            CustomBatchUpdateConstants.USER_ENTITLEMENT,
-            CustomBatchUpdateConstants.USER_ENTITLEMENT,
-            anyMap()
-        );
-        verify(pageModel).setTitle("Batch Upload");
-        verify(pageModel).setValue("vfsPath", testVfsPath);
-        verify(logger).debug("CustomBatchSearchPageController: vfsPath::" + testVfsPath);
+        // Then
+        assertEquals("BatchUpdateSearchScreen.vtl", result);
+        verify(mockLogger).debug("CustomBatchSearchPageController getPageLocation method started");
+        verify(mockServletRequest).getParameter("entitlementInfo");
     }
-
+    
     @Test
-    public void preparePageModel_handlesEntitlementInfo() throws PluginException {
-        // Setup
-        when(request.getParameter("entitlementInfo")).thenReturn("test-data");
-        String testVfsPath = "/another/path";
-        when(PluginProperties.getPropertyValue("vfsPath")).thenReturn(testVfsPath);
+    void testGetPageLocation_WithEmptyEntitlementInfo_ReturnsVtlPage() {
+        // Given
+        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
+        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn("");
         
-        // Execute
-        controller.preparePageModel(context, pageModel);
+        // When
+        String result = controller.getPageLocation(mockContext);
         
-        // Verify
-        verify(logger).debug("CustomBatchSearchPageController: entitlementInfo");
-        // Forward should still happen regardless of entitlementInfo
-        verify(context).forward(any(), any(), any(), anyMap());
+        // Then
+        assertEquals("BatchUpdateSearchScreen.vtl", result);
+        verify(mockLogger).debug("CustomBatchSearchPageController getPageLocation method started");
+        verify(mockServletRequest).getParameter("entitlementInfo");
     }
-}
-
-// Constants class to avoid compilation errors
-class CustomBatchUpdateConstants {
-    public static final String USER_ENTITLEMENT = "user_entitlement";
+    
+    @Test
+    void testGetPageLocation_WithValidEntitlementInfo_ReturnsNull() {
+        // Given
+        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
+        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn("validEntitlement");
+        
+        // When
+        String result = controller.getPageLocation(mockContext);
+        
+        // Then
+        assertNull(result);
+        verify(mockLogger).debug("CustomBatchSearchPageController getPageLocation method started");
+        verify(mockLogger).debug("CustomBatch SearchPageController: getPageLocation entitlementInfo method");
+        verify(mockServletRequest).getParameter("entitlementInfo");
+    }
+    
+    @Test
+    void testHandleSubmit_LogsDebugMessage() throws PluginException {
+        // Given
+        // No specific setup needed for this test
+        
+        // When
+        controller.handleSubmit(mockContext, mockPageModel);
+        
+        // Then
+        verify(mockLogger).debug("CustomBatchSearchPageController handleSubmit method");
+        // Method should complete without throwing exception
+    }
+    
+    @Test
+    void testPreparePageModel_WithNullEntitlementInfo_SetsPageModelValues() throws PluginException {
+        // Given
+        String mockVfsPath = "/mock/vfs/path";
+        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
+        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn(null);
+        
+        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class)) {
+            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
+                           .thenReturn(mockVfsPath);
+            
+            // When
+            controller.preparePageModel(mockContext, mockPageModel);
+            
+            // Then
+            verify(mockPageModel).setTitle("Batch Upload");
+            verify(mockPageModel).setValue("vfsPath", mockVfsPath);
+            verify(mockLogger).debug("CustomBatchSearchPageController: vfsPath::" + mockVfsPath);
+            verify(mockServletRequest).getParameter("entitlementInfo");
+        }
+    }
+    
+    @Test
+    void testPreparePageModel_WithEmptyEntitlementInfo_SetsPageModelValues() throws PluginException {
+        // Given
+        String mockVfsPath = "/mock/vfs/path";
+        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
+        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn("");
+        
+        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class)) {
+            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
+                           .thenReturn(mockVfsPath);
+            
+            // When
+            controller.preparePageModel(mockContext, mockPageModel);
+            
+            // Then
+            verify(mockPageModel).setTitle("Batch Upload");
+            verify(mockPageModel).setValue("vfsPath", mockVfsPath);
+            verify(mockLogger).debug("CustomBatchSearchPageController: vfsPath::" + mockVfsPath);
+            verify(mockServletRequest).getParameter("entitlementInfo");
+        }
+    }
+    
+    @Test
+    void testPreparePageModel_WithValidEntitlementInfo_ForwardsAndSetsValues() throws PluginException {
+        // Given
+        String mockVfsPath = "/mock/vfs/path";
+        String entitlementInfo = "validEntitlement";
+        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
+        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn(entitlementInfo);
+        
+        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class);
+             MockedStatic<CustomBatchUpdateConstants> constants = mockStatic(CustomBatchUpdateConstants.class)) {
+            
+            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
+                           .thenReturn(mockVfsPath);
+            
+            // Mock constants
+            constants.when(() -> CustomBatchUpdateConstants.USER_ENTITLEMENT)
+                    .thenReturn("USER_ENTITLEMENT");
+            
+            // When
+            controller.preparePageModel(mockContext, mockPageModel);
+            
+            // Then
+            verify(mockLogger).debug("CustomBatchSearchPageController: entitlementInfo");
+            verify(mockContext).forward(eq("USER_ENTITLEMENT"), eq("USER_ENTITLEMENT"), 
+                                      eq("USER_ENTITLEMENT"), any(Map.class));
+            verify(mockPageModel).setTitle("Batch Upload");
+            verify(mockPageModel).setValue("vfsPath", mockVfsPath);
+            verify(mockLogger).debug("CustomBatchSearchPageController: vfsPath::" + mockVfsPath);
+            verify(mockServletRequest).getParameter("entitlementInfo");
+        }
+    }
+    
+    @Test
+    void testPreparePageModel_WithPluginException_PropagatesException() throws PluginException {
+        // Given
+        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
+        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn(null);
+        
+        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class)) {
+            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
+                           .thenThrow(new RuntimeException("Property not found"));
+            
+            // When & Then
+            assertThrows(RuntimeException.class, () -> {
+                controller.preparePageModel(mockContext, mockPageModel);
+            });
+            
+            verify(mockPageModel).setTitle("Batch Upload");
+            verify(mockServletRequest).getParameter("entitlementInfo");
+        }
+    }
+    
+    @Test
+    void testPreparePageModel_VerifyMapCreation() throws PluginException {
+        // Given
+        String mockVfsPath = "/mock/vfs/path";
+        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
+        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn("validEntitlement");
+        
+        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class);
+             MockedStatic<CustomBatchUpdateConstants> constants = mockStatic(CustomBatchUpdateConstants.class)) {
+            
+            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
+                           .thenReturn(mockVfsPath);
+            
+            constants.when(() -> CustomBatchUpdateConstants.USER_ENTITLEMENT)
+                    .thenReturn("USER_ENTITLEMENT");
+            
+            // When
+            controller.preparePageModel(mockContext, mockPageModel);
+            
+            // Then
+            verify(mockContext).forward(eq("USER_ENTITLEMENT"), eq("USER_ENTITLEMENT"), 
+                                      eq("USER_ENTITLEMENT"), any(HashMap.class));
+        }
+    }
 }
