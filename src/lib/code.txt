@@ -1,19 +1,94 @@
-UploadedFile mockFile = mock(UploadedFile.class);
-when(mockFile.getSize()).thenReturn(1024L);
-when(mockFile.getInputStream()).thenReturn(new ByteArrayInputStream("file-content".getBytes()));
+@ExtendWith(MockitoExtension.class)
+public class AddNoteControllerTest {
 
-Map<String, UploadedFile> uploadedFiles = new HashMap<>();
-uploadedFiles.put("test.txt", mockFile);
+    @InjectMocks
+    private AddNoteController addNoteController;
 
-when(context.getUploadedFiles()).thenReturn(uploadedFiles);
+    @Mock
+    private Context context;
 
+    @Mock
+    private PageModel pageModel;
 
+    @Mock
+    private HttpServletRequest request;
 
+    @Mock
+    private HttpServletResponse response;
 
+    @Mock
+    private PrintWriter writer;
 
+    @BeforeEach
+    void setUp() throws Exception {
+        when(context.getServletRequest()).thenReturn(request);
+        when(context.getServletResponse()).thenReturn(response);
+        when(response.getWriter()).thenReturn(writer);
+    }
 
-String validJson = "[" +
-    "{\"fileName\":\"ignored.txt\",\"FileDescription\":\"Ignore this\"}," +
-    "{\"fileName\":\"test.txt\",\"FileDescription\":\"Test file\"}" +
-"]";
-when(request.getParameter("descriptionJsonFormat")).thenReturn(validJson);
+    @Test
+    void testGetPageLocation() {
+        String result = addNoteController.getPageLocation(context);
+        assertNull(result);
+    }
+
+    @Test
+    void testHandleSubmit() {
+        assertDoesNotThrow(() -> addNoteController.handleSubmit(context, pageModel));
+    }
+
+    @Test
+    void testPreparePageModelSuccess() throws Exception {
+        // Sample valid data
+        when(request.getParameter("componentCode")).thenReturn("COMP123");
+        when(request.getParameter("componentAction")).thenReturn("ACTION");
+        when(request.getParameter("componentRowId")).thenReturn("101");
+        when(request.getParameter("noteDesc")).thenReturn("Test Note");
+        when(request.getParameter("batchUpdateRequestId")).thenReturn("REQ456");
+
+        User user = mock(User.class);
+        when(user.getUserIdentifier()).thenReturn("testUser");
+        when(user.getFullName()).thenReturn("Test User");
+
+        when(context.getCurrentUser()).thenReturn(user);
+
+        // Mock BOs
+        IDocumentationBO mockDocBO = mock(IDocumentationBO.class);
+        BatchAuditBO mockAuditBO = mock(BatchAuditBO.class);
+
+        // Inject mocks using reflection or setter
+        Field docBOField = AddNoteController.class.getDeclaredField("documentationBO");
+        docBOField.setAccessible(true);
+        docBOField.set(addNoteController, mockDocBO);
+
+        // Mock the static factory if needed using PowerMockito (advanced case)
+
+        assertDoesNotThrow(() -> addNoteController.preparePageModel(context, pageModel));
+        verify(writer).write("SUCCESS"); // Assuming this is the constant message
+    }
+
+    @Test
+    void testPreparePageModelWithMissingComponentCode() throws Exception {
+        when(request.getParameter("componentCode")).thenReturn(null);
+        when(request.getParameter("componentRowId")).thenReturn("101");
+
+        assertThrows(PluginException.class, () ->
+                addNoteController.preparePageModel(context, pageModel)
+        );
+    }
+
+    @Test
+    void testPreparePageModelHandlesExceptionGracefully() throws Exception {
+        when(request.getParameter("componentCode")).thenReturn("COMP123");
+        when(request.getParameter("componentRowId")).thenReturn("invalidInt"); // Will cause exception
+
+        User user = mock(User.class);
+        when(user.getUserIdentifier()).thenReturn("testUser");
+        when(user.getFullName()).thenReturn("Test User");
+        when(context.getCurrentUser()).thenReturn(user);
+
+        assertThrows(PluginException.class, () ->
+                addNoteController.preparePageModel(context, pageModel)
+        );
+    }
+}
