@@ -1,94 +1,124 @@
-@ExtendWith(MockitoExtension.class)
-public class AddNoteControllerTest {
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
-    @InjectMocks
-    private AddNoteController addNoteController;
+import javax.servlet.http.HttpServletRequest;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+
+import com.plugin.PluginException;
+import com.plugin.context.Context;
+import com.plugin.controller.PageController;
+import com.plugin.controller.PageModel;
+import com.plugin.logging.ILogger;
+import com.plugin.logging.LoggerFactory;
+import com.plugin.properties.PluginProperties;
+
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({LoggerFactory.class, PluginProperties.class})
+public class CustomBatchSearchPageControllerTest {
 
     @Mock
     private Context context;
-
+    
     @Mock
     private PageModel pageModel;
-
+    
     @Mock
     private HttpServletRequest request;
-
+    
     @Mock
-    private HttpServletResponse response;
+    private ILogger logger;
+    
+    @InjectMocks
+    private CustomBatchSearchPageController controller;
 
-    @Mock
-    private PrintWriter writer;
-
-    @BeforeEach
-    void setUp() throws Exception {
+    @Before
+    public void setUp() {
+        PowerMockito.mockStatic(LoggerFactory.class, PluginProperties.class);
+        when(LoggerFactory.getLogger(CustomBatchSearchPageController.class)).thenReturn(logger);
         when(context.getServletRequest()).thenReturn(request);
-        when(context.getServletResponse()).thenReturn(response);
-        when(response.getWriter()).thenReturn(writer);
+        MockitoAnnotations.initMocks(this);
+    }
+
+    // Tests for getPageLocation()
+    @Test
+    public void getPageLocation_returnsNull_whenEntitlementInfoPresent() {
+        when(request.getParameter("entitlementInfo")).thenReturn("test-value");
+        assertNull(controller.getPageLocation(context));
+        verify(logger).debug("CustomBatchSearchPageController getPageLocation method started");
+        verify(logger).debug("CustomBatch SearchPageController: getPageLocation entitlementInfo method");
     }
 
     @Test
-    void testGetPageLocation() {
-        String result = addNoteController.getPageLocation(context);
-        assertNull(result);
+    public void getPageLocation_returnsScreenPath_whenEntitlementInfoAbsent() {
+        when(request.getParameter("entitlementInfo")).thenReturn(null);
+        assertEquals("BatchUpdateSearchScreen.vtl", controller.getPageLocation(context));
+        verify(logger).debug("CustomBatchSearchPageController getPageLocation method started");
     }
 
     @Test
-    void testHandleSubmit() {
-        assertDoesNotThrow(() -> addNoteController.handleSubmit(context, pageModel));
+    public void getPageLocation_returnsScreenPath_whenEntitlementInfoEmpty() {
+        when(request.getParameter("entitlementInfo")).thenReturn("");
+        assertEquals("BatchUpdateSearchScreen.vtl", controller.getPageLocation(context));
+        verify(logger).debug("CustomBatchSearchPageController getPageLocation method started");
     }
 
+    // Tests for handleSubmit()
     @Test
-    void testPreparePageModelSuccess() throws Exception {
-        // Sample valid data
-        when(request.getParameter("componentCode")).thenReturn("COMP123");
-        when(request.getParameter("componentAction")).thenReturn("ACTION");
-        when(request.getParameter("componentRowId")).thenReturn("101");
-        when(request.getParameter("noteDesc")).thenReturn("Test Note");
-        when(request.getParameter("batchUpdateRequestId")).thenReturn("REQ456");
-
-        User user = mock(User.class);
-        when(user.getUserIdentifier()).thenReturn("testUser");
-        when(user.getFullName()).thenReturn("Test User");
-
-        when(context.getCurrentUser()).thenReturn(user);
-
-        // Mock BOs
-        IDocumentationBO mockDocBO = mock(IDocumentationBO.class);
-        BatchAuditBO mockAuditBO = mock(BatchAuditBO.class);
-
-        // Inject mocks using reflection or setter
-        Field docBOField = AddNoteController.class.getDeclaredField("documentationBO");
-        docBOField.setAccessible(true);
-        docBOField.set(addNoteController, mockDocBO);
-
-        // Mock the static factory if needed using PowerMockito (advanced case)
-
-        assertDoesNotThrow(() -> addNoteController.preparePageModel(context, pageModel));
-        verify(writer).write("SUCCESS"); // Assuming this is the constant message
+    public void handleSubmit_logsDebugMessage() throws PluginException {
+        controller.handleSubmit(context, pageModel);
+        verify(logger).debug("CustomBatchSearchPageController handleSubmit method");
     }
 
+    // Tests for preparePageModel()
     @Test
-    void testPreparePageModelWithMissingComponentCode() throws Exception {
-        when(request.getParameter("componentCode")).thenReturn(null);
-        when(request.getParameter("componentRowId")).thenReturn("101");
-
-        assertThrows(PluginException.class, () ->
-                addNoteController.preparePageModel(context, pageModel)
+    public void preparePageModel_setsPropertiesAndForwards() throws PluginException {
+        // Setup
+        String testVfsPath = "/test/path";
+        when(PluginProperties.getPropertyValue("vfsPath")).thenReturn(testVfsPath);
+        
+        // Execute
+        controller.preparePageModel(context, pageModel);
+        
+        // Verify
+        verify(logger).debug("CustomBatchSearchPageController: entitlementInfo");
+        verify(context).forward(
+            CustomBatchUpdateConstants.USER_ENTITLEMENT,
+            CustomBatchUpdateConstants.USER_ENTITLEMENT,
+            CustomBatchUpdateConstants.USER_ENTITLEMENT,
+            anyMap()
         );
+        verify(pageModel).setTitle("Batch Upload");
+        verify(pageModel).setValue("vfsPath", testVfsPath);
+        verify(logger).debug("CustomBatchSearchPageController: vfsPath::" + testVfsPath);
     }
 
     @Test
-    void testPreparePageModelHandlesExceptionGracefully() throws Exception {
-        when(request.getParameter("componentCode")).thenReturn("COMP123");
-        when(request.getParameter("componentRowId")).thenReturn("invalidInt"); // Will cause exception
-
-        User user = mock(User.class);
-        when(user.getUserIdentifier()).thenReturn("testUser");
-        when(user.getFullName()).thenReturn("Test User");
-        when(context.getCurrentUser()).thenReturn(user);
-
-        assertThrows(PluginException.class, () ->
-                addNoteController.preparePageModel(context, pageModel)
-        );
+    public void preparePageModel_handlesEntitlementInfo() throws PluginException {
+        // Setup
+        when(request.getParameter("entitlementInfo")).thenReturn("test-data");
+        String testVfsPath = "/another/path";
+        when(PluginProperties.getPropertyValue("vfsPath")).thenReturn(testVfsPath);
+        
+        // Execute
+        controller.preparePageModel(context, pageModel);
+        
+        // Verify
+        verify(logger).debug("CustomBatchSearchPageController: entitlementInfo");
+        // Forward should still happen regardless of entitlementInfo
+        verify(context).forward(any(), any(), any(), anyMap());
     }
+}
+
+// Constants class to avoid compilation errors
+class CustomBatchUpdateConstants {
+    public static final String USER_ENTITLEMENT = "user_entitlement";
 }
