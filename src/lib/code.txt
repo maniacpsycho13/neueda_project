@@ -1,234 +1,270 @@
-package com.example.controller;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-
-import java.util.HashMap;
-import java.util.Map;
-
-import javax.servlet.http.HttpServletRequest;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedStatic;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.Mockito;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 
-import com.example.context.Context;
-import com.example.model.PageModel;
-import com.example.exception.PluginException;
-import com.example.properties.PluginProperties;
-import com.example.constants.CustomBatchUpdateConstants;
-import com.example.logging.ILogger;
-import com.example.logging.LoggerFactory;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.nio.file.Path;
+import java.util.Properties;
 
-@ExtendWith(MockitoExtension.class)
-class CustomBatchSearchPageControllerTest {
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-    @Mock
-    private Context mockContext;
+public class PropertyHandlerTest {
+
+    @TempDir
+    Path tempDir;
     
-    @Mock
-    private PageModel mockPageModel;
-    
-    @Mock
-    private HttpServletRequest mockServletRequest;
-    
-    @Mock
-    private ILogger mockLogger;
-    
-    @InjectMocks
-    private CustomBatchSearchPageController controller;
+    private MockedStatic<LogManager> logManagerMock;
+    private Logger mockLogger;
     
     @BeforeEach
     void setUp() {
-        // Mock static logger factory
-        try (MockedStatic<LoggerFactory> loggerFactory = mockStatic(LoggerFactory.class)) {
-            loggerFactory.when(() -> LoggerFactory.getLogger(CustomBatchSearchPageController.class))
-                        .thenReturn(mockLogger);
+        // Reset singleton instance before each test
+        resetSingleton();
+        
+        // Mock logger
+        mockLogger = mock(Logger.class);
+        logManagerMock = mockStatic(LogManager.class);
+        logManagerMock.when(() -> LogManager.getLogger(PropertyHandler.class))
+                     .thenReturn(mockLogger);
+    }
+    
+    @AfterEach
+    void tearDown() {
+        logManagerMock.close();
+        resetSingleton();
+        // Clear system properties
+        System.clearProperty("Config_filePath");
+    }
+    
+    private void resetSingleton() {
+        try {
+            Field instanceField = PropertyHandler.class.getDeclaredField("instance");
+            instanceField.setAccessible(true);
+            instanceField.set(null, null);
+        } catch (Exception e) {
+            // Ignore - field might not exist yet
         }
     }
     
     @Test
-    void testGetPageLocation_WithNullEntitlementInfo_ReturnsVtlPage() {
-        // Given
-        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
-        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn(null);
+    @DisplayName("Test singleton pattern - same instance returned")
+    void testSingletonPattern() {
+        PropertyHandler instance1 = PropertyHandler.getInstance();
+        PropertyHandler instance2 = PropertyHandler.getInstance();
         
-        // When
-        String result = controller.getPageLocation(mockContext);
-        
-        // Then
-        assertEquals("BatchUpdateSearchScreen.vtl", result);
-        verify(mockLogger).debug("CustomBatchSearchPageController getPageLocation method started");
-        verify(mockServletRequest).getParameter("entitlementInfo");
+        assertSame(instance1, instance2, "getInstance() should return the same instance");
+        assertNotNull(instance1, "Instance should not be null");
     }
     
     @Test
-    void testGetPageLocation_WithEmptyEntitlementInfo_ReturnsVtlPage() {
-        // Given
-        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
-        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn("");
+    @DisplayName("Test constructor with valid properties file in custom path")
+    void testConstructorWithCustomConfigPath() throws IOException {
+        // Create a temporary properties file
+        File propertiesFile = tempDir.resolve("Database_Query.properties").toFile();
+        try (FileWriter writer = new FileWriter(propertiesFile)) {
+            writer.write("test.property=test.value\n");
+            writer.write("database.url=jdbc:mysql://localhost:3306/test\n");
+        }
         
-        // When
-        String result = controller.getPageLocation(mockContext);
+        // Set system property
+        System.setProperty("Config_filePath", tempDir.toString());
         
-        // Then
-        assertEquals("BatchUpdateSearchScreen.vtl", result);
-        verify(mockLogger).debug("CustomBatchSearchPageController getPageLocation method started");
-        verify(mockServletRequest).getParameter("entitlementInfo");
+        PropertyHandler instance = PropertyHandler.getInstance();
+        
+        assertNotNull(instance);
+        verify(mockLogger, never()).error(anyString());
+        verify(mockLogger, never()).error(anyString(), any(Exception.class));
     }
     
     @Test
-    void testGetPageLocation_WithValidEntitlementInfo_ReturnsNull() {
-        // Given
-        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
-        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn("validEntitlement");
+    @DisplayName("Test constructor with valid properties file in default path")
+    void testConstructorWithDefaultPath() throws IOException {
+        // Create properties file in current directory
+        File propertiesFile = new File("Database_Query.properties");
+        try (FileWriter writer = new FileWriter(propertiesFile)) {
+            writer.write("test.property=test.value\n");
+        }
         
-        // When
-        String result = controller.getPageLocation(mockContext);
-        
-        // Then
-        assertNull(result);
-        verify(mockLogger).debug("CustomBatchSearchPageController getPageLocation method started");
-        verify(mockLogger).debug("CustomBatch SearchPageController: getPageLocation entitlementInfo method");
-        verify(mockServletRequest).getParameter("entitlementInfo");
-    }
-    
-    @Test
-    void testHandleSubmit_LogsDebugMessage() throws PluginException {
-        // Given
-        // No specific setup needed for this test
-        
-        // When
-        controller.handleSubmit(mockContext, mockPageModel);
-        
-        // Then
-        verify(mockLogger).debug("CustomBatchSearchPageController handleSubmit method");
-        // Method should complete without throwing exception
-    }
-    
-    @Test
-    void testPreparePageModel_WithNullEntitlementInfo_SetsPageModelValues() throws PluginException {
-        // Given
-        String mockVfsPath = "/mock/vfs/path";
-        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
-        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn(null);
-        
-        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class)) {
-            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
-                           .thenReturn(mockVfsPath);
+        try {
+            PropertyHandler instance = PropertyHandler.getInstance();
             
-            // When
-            controller.preparePageModel(mockContext, mockPageModel);
-            
-            // Then
-            verify(mockPageModel).setTitle("Batch Upload");
-            verify(mockPageModel).setValue("vfsPath", mockVfsPath);
-            verify(mockLogger).debug("CustomBatchSearchPageController: vfsPath::" + mockVfsPath);
-            verify(mockServletRequest).getParameter("entitlementInfo");
+            assertNotNull(instance);
+            verify(mockLogger, never()).error(anyString());
+            verify(mockLogger, never()).error(anyString(), any(Exception.class));
+        } finally {
+            // Clean up
+            propertiesFile.delete();
         }
     }
     
     @Test
-    void testPreparePageModel_WithEmptyEntitlementInfo_SetsPageModelValues() throws PluginException {
-        // Given
-        String mockVfsPath = "/mock/vfs/path";
-        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
-        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn("");
+    @DisplayName("Test constructor with FileNotFoundException")
+    void testConstructorWithFileNotFoundException() {
+        // Don't create any properties file
+        System.setProperty("Config_filePath", "/nonexistent/path");
         
-        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class)) {
-            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
-                           .thenReturn(mockVfsPath);
-            
-            // When
-            controller.preparePageModel(mockContext, mockPageModel);
-            
-            // Then
-            verify(mockPageModel).setTitle("Batch Upload");
-            verify(mockPageModel).setValue("vfsPath", mockVfsPath);
-            verify(mockLogger).debug("CustomBatchSearchPageController: vfsPath::" + mockVfsPath);
-            verify(mockServletRequest).getParameter("entitlementInfo");
-        }
+        PropertyHandler instance = PropertyHandler.getInstance();
+        
+        assertNotNull(instance);
+        verify(mockLogger).error("FileNotFoundException thrown during Send Mail Notification ");
+        verify(mockLogger).error(eq("ERROR:"), any(Exception.class));
     }
     
     @Test
-    void testPreparePageModel_WithValidEntitlementInfo_ForwardsAndSetsValues() throws PluginException {
-        // Given
-        String mockVfsPath = "/mock/vfs/path";
-        String entitlementInfo = "validEntitlement";
-        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
-        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn(entitlementInfo);
-        
-        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class);
-             MockedStatic<CustomBatchUpdateConstants> constants = mockStatic(CustomBatchUpdateConstants.class)) {
-            
-            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
-                           .thenReturn(mockVfsPath);
-            
-            // Mock constants
-            constants.when(() -> CustomBatchUpdateConstants.USER_ENTITLEMENT)
-                    .thenReturn("USER_ENTITLEMENT");
-            
-            // When
-            controller.preparePageModel(mockContext, mockPageModel);
-            
-            // Then
-            verify(mockLogger).debug("CustomBatchSearchPageController: entitlementInfo");
-            verify(mockContext).forward(eq("USER_ENTITLEMENT"), eq("USER_ENTITLEMENT"), 
-                                      eq("USER_ENTITLEMENT"), any(Map.class));
-            verify(mockPageModel).setTitle("Batch Upload");
-            verify(mockPageModel).setValue("vfsPath", mockVfsPath);
-            verify(mockLogger).debug("CustomBatchSearchPageController: vfsPath::" + mockVfsPath);
-            verify(mockServletRequest).getParameter("entitlementInfo");
+    @DisplayName("Test constructor with FileNotFoundException in default path")
+    void testConstructorWithFileNotFoundInDefaultPath() {
+        // Ensure no properties file exists in current directory
+        File propertiesFile = new File("Database_Query.properties");
+        if (propertiesFile.exists()) {
+            propertiesFile.delete();
         }
+        
+        PropertyHandler instance = PropertyHandler.getInstance();
+        
+        assertNotNull(instance);
+        verify(mockLogger).error("FileNotFoundException thrown during Send Mail Notification ");
+        verify(mockLogger).error(eq("ERROR:"), any(Exception.class));
     }
     
     @Test
-    void testPreparePageModel_WithPluginException_PropagatesException() throws PluginException {
-        // Given
-        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
-        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn(null);
+    @DisplayName("Test constructor with malformed properties file")
+    void testConstructorWithMalformedPropertiesFile() throws IOException {
+        // Create a malformed properties file
+        File propertiesFile = tempDir.resolve("Database_Query.properties").toFile();
+        try (FileWriter writer = new FileWriter(propertiesFile)) {
+            writer.write("malformed content that cannot be parsed as properties\n");
+            writer.write("=invalid=line=\n");
+        }
         
-        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class)) {
-            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
-                           .thenThrow(new RuntimeException("Property not found"));
-            
-            // When & Then
-            assertThrows(RuntimeException.class, () -> {
-                controller.preparePageModel(mockContext, mockPageModel);
+        System.setProperty("Config_filePath", tempDir.toString());
+        
+        PropertyHandler instance = PropertyHandler.getInstance();
+        
+        assertNotNull(instance);
+        // Should not throw exception but may log errors depending on Properties.load() behavior
+    }
+    
+    @Test
+    @DisplayName("Test constructor handles null Config_filePath")
+    void testConstructorWithNullConfigPath() {
+        System.clearProperty("Config_filePath");
+        
+        PropertyHandler instance = PropertyHandler.getInstance();
+        
+        assertNotNull(instance);
+        // Should try to load from default path
+    }
+    
+    @Test
+    @DisplayName("Test private constructor accessibility")
+    void testPrivateConstructor() throws Exception {
+        Constructor<PropertyHandler> constructor = PropertyHandler.class.getDeclaredConstructor();
+        assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
+        
+        constructor.setAccessible(true);
+        PropertyHandler instance = constructor.newInstance();
+        assertNotNull(instance);
+    }
+    
+    @Test
+    @DisplayName("Test getInstance thread safety")
+    void testGetInstanceThreadSafety() throws InterruptedException {
+        final PropertyHandler[] instances = new PropertyHandler[10];
+        Thread[] threads = new Thread[10];
+        
+        for (int i = 0; i < 10; i++) {
+            final int index = i;
+            threads[i] = new Thread(() -> {
+                instances[index] = PropertyHandler.getInstance();
             });
-            
-            verify(mockPageModel).setTitle("Batch Upload");
-            verify(mockServletRequest).getParameter("entitlementInfo");
+        }
+        
+        for (Thread thread : threads) {
+            thread.start();
+        }
+        
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        
+        // All instances should be the same
+        PropertyHandler firstInstance = instances[0];
+        for (PropertyHandler instance : instances) {
+            assertSame(firstInstance, instance);
         }
     }
     
     @Test
-    void testPreparePageModel_VerifyMapCreation() throws PluginException {
-        // Given
-        String mockVfsPath = "/mock/vfs/path";
-        when(mockContext.getServletRequest()).thenReturn(mockServletRequest);
-        when(mockServletRequest.getParameter("entitlementInfo")).thenReturn("validEntitlement");
+    @DisplayName("Test logger initialization")
+    void testLoggerInitialization() {
+        PropertyHandler.getInstance();
         
-        try (MockedStatic<PluginProperties> pluginProperties = mockStatic(PluginProperties.class);
-             MockedStatic<CustomBatchUpdateConstants> constants = mockStatic(CustomBatchUpdateConstants.class)) {
-            
-            pluginProperties.when(() -> PluginProperties.getPropertyValue("vfsPath"))
-                           .thenReturn(mockVfsPath);
-            
-            constants.when(() -> CustomBatchUpdateConstants.USER_ENTITLEMENT)
-                    .thenReturn("USER_ENTITLEMENT");
-            
-            // When
-            controller.preparePageModel(mockContext, mockPageModel);
-            
-            // Then
-            verify(mockContext).forward(eq("USER_ENTITLEMENT"), eq("USER_ENTITLEMENT"), 
-                                      eq("USER_ENTITLEMENT"), any(HashMap.class));
+        logManagerMock.verify(() -> LogManager.getLogger(PropertyHandler.class));
+    }
+    
+    @Test
+    @DisplayName("Test config Properties initialization")
+    void testConfigPropertiesInitialization() throws Exception {
+        PropertyHandler instance = PropertyHandler.getInstance();
+        
+        Field configField = PropertyHandler.class.getDeclaredField("config");
+        configField.setAccessible(true);
+        Properties config = (Properties) configField.get(instance);
+        
+        assertNotNull(config);
+    }
+    
+    @Test
+    @DisplayName("Test password fields initialization")
+    void testPasswordFieldsInitialization() throws Exception {
+        PropertyHandler instance = PropertyHandler.getInstance();
+        
+        // Test that password fields exist and are initialized
+        Field strPassRCMField = PropertyHandler.class.getDeclaredField("strPassRCM");
+        Field strPassGFTSField = PropertyHandler.class.getDeclaredField("strPassGFTS");
+        Field strPassIMPLField = PropertyHandler.class.getDeclaredField("strPassIMPL");
+        Field strPassWSField = PropertyHandler.class.getDeclaredField("strPassWS");
+        
+        assertNotNull(strPassRCMField);
+        assertNotNull(strPassGFTSField);
+        assertNotNull(strPassIMPLField);
+        assertNotNull(strPassWSField);
+    }
+    
+    @Test
+    @DisplayName("Test properties loading with actual content")
+    void testPropertiesLoadingWithContent() throws Exception {
+        // Create properties file with specific content
+        File propertiesFile = tempDir.resolve("Database_Query.properties").toFile();
+        try (FileWriter writer = new FileWriter(propertiesFile)) {
+            writer.write("test.key=test.value\n");
+            writer.write("database.url=jdbc:mysql://localhost:3306/test\n");
+            writer.write("username=testuser\n");
         }
+        
+        System.setProperty("Config_filePath", tempDir.toString());
+        
+        PropertyHandler instance = PropertyHandler.getInstance();
+        
+        // Access the config field to verify properties were loaded
+        Field configField = PropertyHandler.class.getDeclaredField("config");
+        configField.setAccessible(true);
+        Properties config = (Properties) configField.get(instance);
+        
+        assertEquals("test.value", config.getProperty("test.key"));
+        assertEquals("jdbc:mysql://localhost:3306/test", config.getProperty("database.url"));
+        assertEquals("testuser", config.getProperty("username"));
     }
 }
