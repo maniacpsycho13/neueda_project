@@ -1,4 +1,58 @@
- mockPropertyMap.put("EMAIL_COMPLIANCE_RULE_QRY", 
-            "SELECT BUSINESS_UNIT, ALERT_TYPE, NEXT_STEP_STATUS, CURRENT_STEP_STATUS_IDENTIFIER, " +
-            "NEXT_STEP_STATUS_IDENTIFIER, NEXT_STEP, NEXT_STEP_QUEUE, ROLE FROM COMPLIANCE_NOTIFICATION_DETAILS " +
-            "ORDER BY ALERT_TYPE, CURRENT_STEP_STATUS_IDENTIFIER, NEXT_STEP_STATUS_IDENTIFIER");
+Okay, this "Executive Summary" slide is crucial for your final presentation. It's the elevator pitch for your entire internship work. Based on the template and your previous description, here's how you should structure and write this slide.
+
+The key is to answer the red text prompts concisely and then address the "Audience" and "Purpose" sections from your perspective as an intern.
+
+---
+
+### **Executive Summary: My Internship Contribution to Citi's Development & Quality Assurance**
+
+---
+
+**[Business Problem/Opportunity & My Focus]**
+
+During my 2-month internship at Citi, my work addressed two key areas:
+
+* **Enhancing Code Quality & Reliability:** Financial systems demand the highest levels of accuracy and robustness. My primary focus involved writing comprehensive JUnit test cases to identify and mitigate potential software defects early, significantly contributing to the stability and reliability of existing applications.
+* **Innovating Client Solutions (Smart Portfolio Manager):** Citi continuously seeks to empower clients with intelligent tools. I contributed to the development of a 'Smart Portfolio Manager' to explore innovative ways to help users manage and optimize their investments, demonstrating the potential for enhanced client self-service and data-driven insights.
+
+**[What I Looked to Achieve]**
+
+Through these efforts, I aimed to:
+
+* Contribute directly to the robustness and maintainability of critical financial applications through rigorous testing practices.
+* Gain hands-on full-stack development experience by building a practical application from concept to implementation.
+* Apply modern technologies (ReactJS, Spring Boot, MongoDB, PostgreSQL) to solve real-world problems within a fast-paced corporate environment.
+* Understand the software development lifecycle and best practices within a leading financial institution.
+
+**[Key Stakeholders & My Engagement]**
+
+* **Project Customer (Internal/Hypothetical for Smart Portfolio):** Ultimately, the internal teams who would use the robust code, or potentially future Citi clients who would benefit from tools like the Smart Portfolio Manager.
+* **Project Sponsor/Manager:** My manager, [Manager's Name], who provided guidance, mentorship, and project assignments, supporting my learning and contributions.
+* **Project Team Members:** Collaboration with fellow interns and full-time developers within my team for code reviews, knowledge sharing, and integration efforts.
+* **Other Stakeholders:** Technology teams responsible for maintaining existing codebases (beneficiaries of JUnit tests), and potentially architects/SMEs for design feedback on the Smart Portfolio Manager.
+
+**[The Purpose of My Contribution]**
+
+My work aimed to:
+
+* **Provide a clear statement of my project's purpose and what I delivered:** Demonstrated tangible contributions in both quality assurance (JUnit testing across multiple repositories) and full-stack application development (Smart Portfolio Manager, RESTful APIs).
+* **Define my role and responsibilities:** Executed on assigned development and testing tasks, learned rapidly, and delivered functional components under the guidance of my manager, ensuring the success of my projects and personal growth.
+
+---
+
+**Key things to remember when presenting this slide:**
+
+* **Be concise:** Each bullet point should be a quick read.
+* **Focus on the "why":** Why was JUnit testing important? Why build the Smart Portfolio Manager?
+* **Tailor the "Audience" section:** Since you're an intern, you're not managing a huge charter, but you're contributing to projects that *do* have these stakeholders. Frame it from your perspective of who you interacted with or who would be impacted by your work.
+* **Highlight impact:** Even as an intern, you want to show that your work mattered.
+* **Practice:** This slide sets the tone. Be confident and clear.
+
+
+
+
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
