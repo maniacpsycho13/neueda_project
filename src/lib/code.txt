@@ -2,269 +2,335 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
 import org.mockito.MockedStatic;
-import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.LogManager;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.nio.file.Path;
-import java.util.Properties;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-public class PropertyHandlerTest {
+@ExtendWith(MockitoExtension.class)
+public class InsertCitiEventDetailTest {
 
-    @TempDir
-    Path tempDir;
+    @Mock
+    private Connection mockConnection;
     
-    private MockedStatic<LogManager> logManagerMock;
+    @Mock
+    private PreparedStatement mockPreparedStatement;
+    
+    @Mock
     private Logger mockLogger;
+    
+    @Mock
+    private CacheFactory mockCacheFactory;
+    
+    private MockedStatic<CacheFactory> cacheFactoryMock;
+    
+    private PropertyHandler instance;
+    
+    private Map<String, String> mockPropertyMap;
     
     @BeforeEach
     void setUp() {
-        // Reset singleton instance before each test
-        resetSingleton();
+        // Initialize the PropertyHandler instance
+        instance = spy(new PropertyHandler());
         
-        // Mock logger
-        mockLogger = mock(Logger.class);
-        logManagerMock = mockStatic(LogManager.class);
-        logManagerMock.when(() -> LogManager.getLogger(PropertyHandler.class))
-                     .thenReturn(mockLogger);
+        // Mock the logger field
+        try {
+            java.lang.reflect.Field loggerField = PropertyHandler.class.getDeclaredField("logger");
+            loggerField.setAccessible(true);
+            loggerField.set(instance, mockLogger);
+        } catch (Exception e) {
+            // Handle reflection exception
+        }
+        
+        // Setup mock property map
+        mockPropertyMap = new HashMap<>();
+        mockPropertyMap.put("EMAIL_EVENT_QRY", "INSERT INTO CITI_EVENT_DETAILS (PK_CITI_EVENT_DETAILS, ALERT_ID, STAGE, ACTION_TEXT) VALUES (CITI_SEQ_EVENT_DETAILS.NEXTVAL,?, (SELECT CW.WSC_STEP_DESCRIPTION FROM CITI_WORKFLOW CW WHERE A.ALERT_ID=? AND A.status_id =CW.WSC_STEP_ID), 'admin', 'Administrator')");
+        
+        // Mock CacheFactory
+        cacheFactoryMock = mockStatic(CacheFactory.class);
+        cacheFactoryMock.when(CacheFactory::get_mapPropertyKeyValue)
+                       .thenReturn(mockPropertyMap);
     }
     
     @AfterEach
     void tearDown() {
-        logManagerMock.close();
-        resetSingleton();
-        // Clear system properties
-        System.clearProperty("Config_filePath");
-    }
-    
-    private void resetSingleton() {
-        try {
-            Field instanceField = PropertyHandler.class.getDeclaredField("instance");
-            instanceField.setAccessible(true);
-            instanceField.set(null, null);
-        } catch (Exception e) {
-            // Ignore - field might not exist yet
-        }
+        cacheFactoryMock.close();
     }
     
     @Test
-    @DisplayName("Test singleton pattern - same instance returned")
-    void testSingletonPattern() {
-        PropertyHandler instance1 = PropertyHandler.getInstance();
-        PropertyHandler instance2 = PropertyHandler.getInstance();
+    @DisplayName("Test successful insertion with valid alertId")
+    void testSuccessfulInsertionWithValidAlertId() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
         
-        assertSame(instance1, instance2, "getInstance() should return the same instance");
-        assertNotNull(instance1, "Instance should not be null");
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(null);
+        
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertTrue(result, "Method should return true for successful insertion");
+        
+        verify(mockConnection).prepareStatement(mockPropertyMap.get("EMAIL_EVENT_QRY"));
+        verify(mockPreparedStatement).setString(1, alertId);
+        verify(mockPreparedStatement).setString(2, alertId);
+        verify(mockPreparedStatement).executeQuery();
+        verify(mockLogger).debug("CITI_EVENT_DETAIL Record Inserted Successfully..");
+        verify(instance).closeDBConnection(mockConnection, mockPreparedStatement, null);
     }
     
     @Test
-    @DisplayName("Test constructor with valid properties file in custom path")
-    void testConstructorWithCustomConfigPath() throws IOException {
-        // Create a temporary properties file
-        File propertiesFile = tempDir.resolve("Database_Query.properties").toFile();
-        try (FileWriter writer = new FileWriter(propertiesFile)) {
-            writer.write("test.property=test.value\n");
-            writer.write("database.url=jdbc:mysql://localhost:3306/test\n");
-        }
+    @DisplayName("Test with null alertId - should return false and log debug message")
+    void testWithNullAlertId() throws SQLException {
+        // Arrange
+        String alertId = null;
         
-        // Set system property
-        System.setProperty("Config_filePath", tempDir.toString());
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
         
-        PropertyHandler instance = PropertyHandler.getInstance();
-        
-        assertNotNull(instance);
-        verify(mockLogger, never()).error(anyString());
-        verify(mockLogger, never()).error(anyString(), any(Exception.class));
+        // Assert
+        assertFalse(result, "Method should return false for null alertId");
+        verify(mockLogger).debug("Invalid input parameters..");
+        verify(instance, never()).getConnection();
     }
     
     @Test
-    @DisplayName("Test constructor with valid properties file in default path")
-    void testConstructorWithDefaultPath() throws IOException {
-        // Create properties file in current directory
-        File propertiesFile = new File("Database_Query.properties");
-        try (FileWriter writer = new FileWriter(propertiesFile)) {
-            writer.write("test.property=test.value\n");
-        }
+    @DisplayName("Test with empty string alertId - should return false and log debug message")
+    void testWithEmptyStringAlertId() throws SQLException {
+        // Arrange
+        String alertId = "";
         
-        try {
-            PropertyHandler instance = PropertyHandler.getInstance();
-            
-            assertNotNull(instance);
-            verify(mockLogger, never()).error(anyString());
-            verify(mockLogger, never()).error(anyString(), any(Exception.class));
-        } finally {
-            // Clean up
-            propertiesFile.delete();
-        }
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertFalse(result, "Method should return false for empty string alertId");
+        verify(mockLogger).debug("Invalid input parameters..");
+        verify(instance, never()).getConnection();
     }
     
     @Test
-    @DisplayName("Test constructor with FileNotFoundException")
-    void testConstructorWithFileNotFoundException() {
-        // Don't create any properties file
-        System.setProperty("Config_filePath", "/nonexistent/path");
+    @DisplayName("Test with blank string alertId - should proceed with insertion")
+    void testWithBlankStringAlertId() throws SQLException {
+        // Arrange
+        String alertId = "   "; // blank but not empty
         
-        PropertyHandler instance = PropertyHandler.getInstance();
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
         
-        assertNotNull(instance);
-        verify(mockLogger).error("FileNotFoundException thrown during Send Mail Notification ");
-        verify(mockLogger).error(eq("ERROR:"), any(Exception.class));
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(null);
+        
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertTrue(result, "Method should return true for blank string alertId");
+        verify(mockLogger, never()).debug("Invalid input parameters..");
+        verify(instance).getConnection();
     }
     
     @Test
-    @DisplayName("Test constructor with FileNotFoundException in default path")
-    void testConstructorWithFileNotFoundInDefaultPath() {
-        // Ensure no properties file exists in current directory
-        File propertiesFile = new File("Database_Query.properties");
-        if (propertiesFile.exists()) {
-            propertiesFile.delete();
-        }
+    @DisplayName("Test SQLException during database operation")
+    void testSQLExceptionDuringDatabaseOperation() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        SQLException sqlException = new SQLException("Database connection failed");
         
-        PropertyHandler instance = PropertyHandler.getInstance();
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
         
-        assertNotNull(instance);
-        verify(mockLogger).error("FileNotFoundException thrown during Send Mail Notification ");
-        verify(mockLogger).error(eq("ERROR:"), any(Exception.class));
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenThrow(sqlException);
+        
+        // Act & Assert
+        SQLException thrownException = assertThrows(SQLException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
+        
+        assertEquals(sqlException, thrownException);
+        verify(mockLogger).error("ERROR_MSG", sqlException.getMessage()); // Replace ERROR_MSG with actual constant
+        verify(mockLogger).errorStacktrace("ERROR_KEYWORD", sqlException); // Replace ERROR_KEYWORD with actual constant
+        verify(instance).closeDBConnection(mockConnection, mockPreparedStatement, null);
     }
     
     @Test
-    @DisplayName("Test constructor with malformed properties file")
-    void testConstructorWithMalformedPropertiesFile() throws IOException {
-        // Create a malformed properties file
-        File propertiesFile = tempDir.resolve("Database_Query.properties").toFile();
-        try (FileWriter writer = new FileWriter(propertiesFile)) {
-            writer.write("malformed content that cannot be parsed as properties\n");
-            writer.write("=invalid=line=\n");
-        }
+    @DisplayName("Test SQLException during connection establishment")
+    void testSQLExceptionDuringConnectionEstablishment() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        SQLException sqlException = new SQLException("Connection failed");
         
-        System.setProperty("Config_filePath", tempDir.toString());
+        doThrow(sqlException).when(instance).getConnection();
         
-        PropertyHandler instance = PropertyHandler.getInstance();
+        // Act & Assert
+        SQLException thrownException = assertThrows(SQLException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
         
-        assertNotNull(instance);
-        // Should not throw exception but may log errors depending on Properties.load() behavior
+        assertEquals(sqlException, thrownException);
+        verify(mockLogger).error("ERROR_MSG", sqlException.getMessage()); // Replace ERROR_MSG with actual constant
+        verify(mockLogger).errorStacktrace("ERROR_KEYWORD", sqlException); // Replace ERROR_KEYWORD with actual constant
+        verify(instance).closeDBConnection(null, null, null);
     }
     
     @Test
-    @DisplayName("Test constructor handles null Config_filePath")
-    void testConstructorWithNullConfigPath() {
-        System.clearProperty("Config_filePath");
+    @DisplayName("Test SQLException during PreparedStatement creation")
+    void testSQLExceptionDuringPreparedStatementCreation() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        SQLException sqlException = new SQLException("PreparedStatement creation failed");
         
-        PropertyHandler instance = PropertyHandler.getInstance();
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), isNull(), isNull());
         
-        assertNotNull(instance);
-        // Should try to load from default path
+        when(mockConnection.prepareStatement(anyString())).thenThrow(sqlException);
+        
+        // Act & Assert
+        SQLException thrownException = assertThrows(SQLException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
+        
+        assertEquals(sqlException, thrownException);
+        verify(mockLogger).error("ERROR_MSG", sqlException.getMessage()); // Replace ERROR_MSG with actual constant
+        verify(mockLogger).errorStacktrace("ERROR_KEYWORD", sqlException); // Replace ERROR_KEYWORD with actual constant
+        verify(instance).closeDBConnection(mockConnection, null, null);
     }
     
     @Test
-    @DisplayName("Test private constructor accessibility")
-    void testPrivateConstructor() throws Exception {
-        Constructor<PropertyHandler> constructor = PropertyHandler.class.getDeclaredConstructor();
-        assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
+    @DisplayName("Test CacheFactory returns null property map")
+    void testCacheFactoryReturnsNullPropertyMap() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
         
-        constructor.setAccessible(true);
-        PropertyHandler instance = constructor.newInstance();
-        assertNotNull(instance);
+        cacheFactoryMock.when(CacheFactory::get_mapPropertyKeyValue).thenReturn(null);
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        // Act & Assert
+        assertThrows(NullPointerException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
+        
+        verify(instance).closeDBConnection(mockConnection, null, null);
     }
     
     @Test
-    @DisplayName("Test getInstance thread safety")
-    void testGetInstanceThreadSafety() throws InterruptedException {
-        final PropertyHandler[] instances = new PropertyHandler[10];
-        Thread[] threads = new Thread[10];
+    @DisplayName("Test CacheFactory returns empty property map")
+    void testCacheFactoryReturnsEmptyPropertyMap() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        Map<String, String> emptyMap = new HashMap<>();
         
-        for (int i = 0; i < 10; i++) {
-            final int index = i;
-            threads[i] = new Thread(() -> {
-                instances[index] = PropertyHandler.getInstance();
-            });
-        }
+        cacheFactoryMock.when(CacheFactory::get_mapPropertyKeyValue).thenReturn(emptyMap);
         
-        for (Thread thread : threads) {
-            thread.start();
-        }
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
         
-        for (Thread thread : threads) {
-            thread.join();
-        }
+        when(mockConnection.prepareStatement(isNull())).thenReturn(mockPreparedStatement);
         
-        // All instances should be the same
-        PropertyHandler firstInstance = instances[0];
-        for (PropertyHandler instance : instances) {
-            assertSame(firstInstance, instance);
-        }
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertTrue(result, "Method should still return true even with null query");
+        verify(mockConnection).prepareStatement(null);
     }
     
     @Test
-    @DisplayName("Test logger initialization")
-    void testLoggerInitialization() {
-        PropertyHandler.getInstance();
+    @DisplayName("Test parameter setting with special characters in alertId")
+    void testParameterSettingWithSpecialCharacters() throws SQLException {
+        // Arrange
+        String alertId = "ALERT'123\";<>{}[]";
         
-        logManagerMock.verify(() -> LogManager.getLogger(PropertyHandler.class));
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(null);
+        
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertTrue(result, "Method should handle special characters in alertId");
+        verify(mockPreparedStatement).setString(1, alertId);
+        verify(mockPreparedStatement).setString(2, alertId);
     }
     
     @Test
-    @DisplayName("Test config Properties initialization")
-    void testConfigPropertiesInitialization() throws Exception {
-        PropertyHandler instance = PropertyHandler.getInstance();
+    @DisplayName("Test finally block execution on successful operation")
+    void testFinallyBlockExecutionOnSuccess() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
         
-        Field configField = PropertyHandler.class.getDeclaredField("config");
-        configField.setAccessible(true);
-        Properties config = (Properties) configField.get(instance);
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
         
-        assertNotNull(config);
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(null);
+        
+        // Act
+        instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        verify(instance).closeDBConnection(mockConnection, mockPreparedStatement, null);
     }
     
     @Test
-    @DisplayName("Test password fields initialization")
-    void testPasswordFieldsInitialization() throws Exception {
-        PropertyHandler instance = PropertyHandler.getInstance();
+    @DisplayName("Test finally block execution on exception")
+    void testFinallyBlockExecutionOnException() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        SQLException sqlException = new SQLException("Test exception");
         
-        // Test that password fields exist and are initialized
-        Field strPassRCMField = PropertyHandler.class.getDeclaredField("strPassRCM");
-        Field strPassGFTSField = PropertyHandler.class.getDeclaredField("strPassGFTS");
-        Field strPassIMPLField = PropertyHandler.class.getDeclaredField("strPassIMPL");
-        Field strPassWSField = PropertyHandler.class.getDeclaredField("strPassWS");
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
         
-        assertNotNull(strPassRCMField);
-        assertNotNull(strPassGFTSField);
-        assertNotNull(strPassIMPLField);
-        assertNotNull(strPassWSField);
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenThrow(sqlException);
+        
+        // Act & Assert
+        assertThrows(SQLException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
+        
+        verify(instance).closeDBConnection(mockConnection, mockPreparedStatement, null);
     }
     
     @Test
-    @DisplayName("Test properties loading with actual content")
-    void testPropertiesLoadingWithContent() throws Exception {
-        // Create properties file with specific content
-        File propertiesFile = tempDir.resolve("Database_Query.properties").toFile();
-        try (FileWriter writer = new FileWriter(propertiesFile)) {
-            writer.write("test.key=test.value\n");
-            writer.write("database.url=jdbc:mysql://localhost:3306/test\n");
-            writer.write("username=testuser\n");
-        }
+    @DisplayName("Test method behavior with very long alertId")
+    void testWithVeryLongAlertId() throws SQLException {
+        // Arrange
+        String alertId = "A".repeat(1000); // Very long alert ID
         
-        System.setProperty("Config_filePath", tempDir.toString());
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
         
-        PropertyHandler instance = PropertyHandler.getInstance();
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(null);
         
-        // Access the config field to verify properties were loaded
-        Field configField = PropertyHandler.class.getDeclaredField("config");
-        configField.setAccessible(true);
-        Properties config = (Properties) configField.get(instance);
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
         
-        assertEquals("test.value", config.getProperty("test.key"));
-        assertEquals("jdbc:mysql://localhost:3306/test", config.getProperty("database.url"));
-        assertEquals("testuser", config.getProperty("username"));
+        // Assert
+        assertTrue(result, "Method should handle very long alertId");
+        verify(mockPreparedStatement).setString(1, alertId);
+        verify(mockPreparedStatement).setString(2, alertId);
     }
 }
