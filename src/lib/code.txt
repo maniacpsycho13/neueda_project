@@ -1,4 +1,44 @@
-@BeforeEach
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.apache.logging.log4j.Logger;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+public class InsertCitiEventDetailTest {
+
+    @Mock
+    private Connection mockConnection;
+    
+    @Mock
+    private PreparedStatement mockPreparedStatement;
+    
+    @Mock
+    private Logger mockLogger;
+    
+    @Mock
+    private CacheFactory mockCacheFactory;
+    
+    private MockedStatic<CacheFactory> cacheFactoryMock;
+    
+    private YourClassName instance; // Replace with actual class name
+    
+    private Map<String, String> mockPropertyMap;
+    
+    @BeforeEach
     void setUp() {
         // Initialize the class instance (replace with actual class name)
         instance = spy(new YourClassName());
@@ -52,3 +92,245 @@
         verify(mockLogger).debug("CITI_EVENT_DETAIL Record Inserted Successfully..");
         verify(instance).closeDBConnection(mockConnection, mockPreparedStatement, null);
     }
+    
+    @Test
+    @DisplayName("Test with null alertId - should return false and log debug message")
+    void testWithNullAlertId() throws SQLException {
+        // Arrange
+        String alertId = null;
+        
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertFalse(result, "Method should return false for null alertId");
+        verify(mockLogger).debug("Invalid input parameters..");
+        verify(instance, never()).getConnection();
+    }
+    
+    @Test
+    @DisplayName("Test with empty string alertId - should return false and log debug message")
+    void testWithEmptyStringAlertId() throws SQLException {
+        // Arrange
+        String alertId = "";
+        
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertFalse(result, "Method should return false for empty string alertId");
+        verify(mockLogger).debug("Invalid input parameters..");
+        verify(instance, never()).getConnection();
+    }
+    
+    @Test
+    @DisplayName("Test with blank string alertId - should proceed with insertion")
+    void testWithBlankStringAlertId() throws SQLException {
+        // Arrange
+        String alertId = "   "; // blank but not empty
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(null);
+        
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertTrue(result, "Method should return true for blank string alertId");
+        verify(mockLogger, never()).debug("Invalid input parameters..");
+        verify(instance).getConnection();
+    }
+    
+    @Test
+    @DisplayName("Test SQLException during database operation")
+    void testSQLExceptionDuringDatabaseOperation() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        SQLException sqlException = new SQLException("Database connection failed");
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenThrow(sqlException);
+        
+        // Act & Assert
+        SQLException thrownException = assertThrows(SQLException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
+        
+        assertEquals(sqlException, thrownException);
+        verify(mockLogger).error("ERROR_MSG", sqlException.getMessage()); // Replace ERROR_MSG with actual constant
+        verify(mockLogger).errorStacktrace("ERROR_KEYWORD", sqlException); // Replace ERROR_KEYWORD with actual constant
+        verify(instance).closeDBConnection(mockConnection, mockPreparedStatement, null);
+    }
+    
+    @Test
+    @DisplayName("Test SQLException during connection establishment")
+    void testSQLExceptionDuringConnectionEstablishment() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        SQLException sqlException = new SQLException("Connection failed");
+        
+        doThrow(sqlException).when(instance).getConnection();
+        
+        // Act & Assert
+        SQLException thrownException = assertThrows(SQLException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
+        
+        assertEquals(sqlException, thrownException);
+        verify(mockLogger).error("ERROR_MSG", sqlException.getMessage()); // Replace ERROR_MSG with actual constant
+        verify(mockLogger).errorStacktrace("ERROR_KEYWORD", sqlException); // Replace ERROR_KEYWORD with actual constant
+        verify(instance).closeDBConnection(null, null, null);
+    }
+    
+    @Test
+    @DisplayName("Test SQLException during PreparedStatement creation")
+    void testSQLExceptionDuringPreparedStatementCreation() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        SQLException sqlException = new SQLException("PreparedStatement creation failed");
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), isNull(), isNull());
+        
+        when(mockConnection.prepareStatement(anyString())).thenThrow(sqlException);
+        
+        // Act & Assert
+        SQLException thrownException = assertThrows(SQLException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
+        
+        assertEquals(sqlException, thrownException);
+        verify(mockLogger).error("ERROR_MSG", sqlException.getMessage()); // Replace ERROR_MSG with actual constant
+        verify(mockLogger).errorStacktrace("ERROR_KEYWORD", sqlException); // Replace ERROR_KEYWORD with actual constant
+        verify(instance).closeDBConnection(mockConnection, null, null);
+    }
+    
+    @Test
+    @DisplayName("Test CacheFactory returns null property map")
+    void testCacheFactoryReturnsNullPropertyMap() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        
+        cacheFactoryMock.when(CacheFactory::get_mapPropertyKeyValue).thenReturn(null);
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        // Act & Assert
+        assertThrows(NullPointerException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
+        
+        verify(instance).closeDBConnection(mockConnection, null, null);
+    }
+    
+    @Test
+    @DisplayName("Test CacheFactory returns empty property map")
+    void testCacheFactoryReturnsEmptyPropertyMap() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        Map<String, String> emptyMap = new HashMap<>();
+        
+        cacheFactoryMock.when(CacheFactory::get_mapPropertyKeyValue).thenReturn(emptyMap);
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        when(mockConnection.prepareStatement(isNull())).thenReturn(mockPreparedStatement);
+        
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertTrue(result, "Method should still return true even with null query");
+        verify(mockConnection).prepareStatement(null);
+    }
+    
+    @Test
+    @DisplayName("Test parameter setting with special characters in alertId")
+    void testParameterSettingWithSpecialCharacters() throws SQLException {
+        // Arrange
+        String alertId = "ALERT'123\";<>{}[]";
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(null);
+        
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertTrue(result, "Method should handle special characters in alertId");
+        verify(mockPreparedStatement).setString(1, alertId);
+        verify(mockPreparedStatement).setString(2, alertId);
+    }
+    
+    @Test
+    @DisplayName("Test finally block execution on successful operation")
+    void testFinallyBlockExecutionOnSuccess() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(null);
+        
+        // Act
+        instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        verify(instance).closeDBConnection(mockConnection, mockPreparedStatement, null);
+    }
+    
+    @Test
+    @DisplayName("Test finally block execution on exception")
+    void testFinallyBlockExecutionOnException() throws SQLException {
+        // Arrange
+        String alertId = "ALERT123";
+        SQLException sqlException = new SQLException("Test exception");
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenThrow(sqlException);
+        
+        // Act & Assert
+        assertThrows(SQLException.class, () -> {
+            instance.insertCitiEventDetail(alertId);
+        });
+        
+        verify(instance).closeDBConnection(mockConnection, mockPreparedStatement, null);
+    }
+    
+    @Test
+    @DisplayName("Test method behavior with very long alertId")
+    void testWithVeryLongAlertId() throws SQLException {
+        // Arrange
+        String alertId = "A".repeat(1000); // Very long alert ID
+        
+        doReturn(mockConnection).when(instance).getConnection();
+        doNothing().when(instance).closeDBConnection(any(Connection.class), any(PreparedStatement.class), isNull());
+        
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenReturn(null);
+        
+        // Act
+        boolean result = instance.insertCitiEventDetail(alertId);
+        
+        // Assert
+        assertTrue(result, "Method should handle very long alertId");
+        verify(mockPreparedStatement).setString(1, alertId);
+        verify(mockPreparedStatement).setString(2, alertId);
+    }
+}
