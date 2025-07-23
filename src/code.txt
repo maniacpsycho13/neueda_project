@@ -1,0 +1,232 @@
+package com.example.controller;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import javax.faces.context.FacesContext;
+import javax.faces.model.DataModel;
+import javax.faces.model.ListDataModel;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class CwapMiddleWareControllerTest {
+
+    @Mock
+    private Context mockContext;
+    
+    @Mock
+    private PageModel mockPageModel;
+    
+    @Mock
+    private User mockCurrentUser;
+    
+    @Mock
+    private CwapMiddleWareDAOImpl mockAlertAssignmentDAOImpl;
+    
+    @InjectMocks
+    private CwapMiddleWareController controller;
+
+    private static final String TEST_USER_ID = "test123";
+    private static final String TEST_USER_ROLE = "ADMIN";
+    private static final String TEST_FULL_NAME = "John Doe";
+
+    @BeforeEach
+    void setUp() {
+        // Initialize the controller with default values
+        controller = new CwapMiddleWareController();
+    }
+
+    @Test
+    void testHandleSubmit() throws Exception {
+        // Given
+        when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
+        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
+
+        // When
+        controller.handleSubmit(mockContext, mockPageModel);
+
+        // Then
+        // Verify that the method executes without throwing exceptions
+        // Since the method only contains logging, we can verify it completed successfully
+        assertDoesNotThrow(() -> controller.handleSubmit(mockContext, mockPageModel));
+    }
+
+    @Test
+    void testPreparePageModel_WithValidUser() throws Exception {
+        // Given
+        when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
+        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
+        when(mockCurrentUser.getFullName()).thenReturn(TEST_FULL_NAME);
+        
+        when(mockAlertAssignmentDAOImpl.getRoleName(mockContext, TEST_USER_ID))
+            .thenReturn(java.util.Arrays.asList("ADMIN", "USER"));
+
+        // When
+        controller = spy(new CwapMiddleWareController());
+        doReturn(mockAlertAssignmentDAOImpl).when(controller).createAlertAssignmentDAOImpl();
+        
+        controller.preparePageModel(mockContext, mockPageModel);
+
+        // Then
+        verify(mockPageModel).setTitle("CWAP Portal");
+        verify(mockPageModel).setValue("userId", TEST_USER_ID);
+        verify(mockPageModel).setValue("fullName", TEST_FULL_NAME);
+        verify(mockPageModel).setValue(eq("userRole"), anyString());
+    }
+
+    @Test
+    void testPreparePageModel_WithNullUser() throws Exception {
+        // Given
+        when(mockContext.getCurrentUser()).thenReturn(null);
+
+        // When & Then
+        assertThrows(NullPointerException.class, () -> {
+            controller.preparePageModel(mockContext, mockPageModel);
+        });
+    }
+
+    @Test
+    void testPreparePageModel_RoleProcessing() throws Exception {
+        // Given
+        String rawRole = "ADMIN\\USER\\VIEWER";
+        when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
+        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
+        when(mockCurrentUser.getFullName()).thenReturn(TEST_FULL_NAME);
+        
+        when(mockAlertAssignmentDAOImpl.getRoleName(mockContext, TEST_USER_ID))
+            .thenReturn(java.util.Arrays.asList(rawRole));
+
+        // When
+        controller = spy(new CwapMiddleWareController());
+        doReturn(mockAlertAssignmentDAOImpl).when(controller).createAlertAssignmentDAOImpl();
+        
+        controller.preparePageModel(mockContext, mockPageModel);
+
+        // Then
+        // Verify that backslashes are replaced with empty strings
+        verify(mockPageModel).setValue(eq("userRole"), eq("ADMINUSERVIEWER"));
+    }
+
+    @Test
+    void testGetPageLocation() {
+        // When
+        String result = controller.getPageLocation(mockContext);
+
+        // Then
+        assertEquals("vtl/index.html", result);
+    }
+
+    @Test
+    void testSendErrorMessage() {
+        // Given
+        String testMessage = "Test error message";
+
+        // When & Then
+        TranslatableException exception = assertThrows(TranslatableException.class, () -> {
+            controller.sendErrorMessage(testMessage);
+        });
+
+        assertNotNull(exception);
+        // The exception should contain the translatable message
+        assertTrue(exception.getMessage().contains(testMessage) || 
+                   exception.getCause().getMessage().contains(testMessage));
+    }
+
+    @Test
+    void testSendErrorMessage_WithNullMessage() {
+        // When & Then
+        assertThrows(TranslatableException.class, () -> {
+            controller.sendErrorMessage(null);
+        });
+    }
+
+    @Test
+    void testSendErrorMessage_WithEmptyMessage() {
+        // Given
+        String emptyMessage = "";
+
+        // When & Then
+        assertThrows(TranslatableException.class, () -> {
+            controller.sendErrorMessage(emptyMessage);
+        });
+    }
+
+    @Test
+    void testGetRoleNameProperty() throws Exception {
+        // Given
+        controller = spy(new CwapMiddleWareController());
+        when(mockAlertAssignmentDAOImpl.getRoleName(mockContext, TEST_USER_ID))
+            .thenReturn(java.util.Arrays.asList("ADMIN", "USER"));
+
+        // When
+        doReturn(mockAlertAssignmentDAOImpl).when(controller).createAlertAssignmentDAOImpl();
+        
+        // Simulate the preparePageModel execution to set getRoleName
+        when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
+        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
+        when(mockCurrentUser.getFullName()).thenReturn(TEST_FULL_NAME);
+        
+        controller.preparePageModel(mockContext, mockPageModel);
+
+        // Then
+        // Verify that getRoleName was populated (this tests the internal state)
+        assertNotNull(controller.getRoleName);
+        assertEquals(2, controller.getRoleName.size());
+    }
+
+    @Test
+    void testControllerInitialization() {
+        // When
+        CwapMiddleWareController newController = new CwapMiddleWareController();
+
+        // Then
+        assertNotNull(newController);
+        // Verify initial state of collections and strings
+        assertNotNull(newController.collAlerts);
+        assertNotNull(newController.responseMessage);
+        assertNotNull(newController.getRoleName);
+        assertTrue(newController.collAlerts.isEmpty());
+        assertEquals("", newController.alertId);
+        assertEquals("", newController.userName);
+        assertEquals("", newController.isInquiryView);
+    }
+
+    @Test
+    void testMultipleRoleProcessing() throws Exception {
+        // Given
+        when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
+        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
+        when(mockCurrentUser.getFullName()).thenReturn(TEST_FULL_NAME);
+        
+        // Role with multiple backslashes
+        when(mockAlertAssignmentDAOImpl.getRoleName(mockContext, TEST_USER_ID))
+            .thenReturn(java.util.Arrays.asList("ADMIN\\\\USER\\\\VIEWER"));
+
+        // When
+        controller = spy(new CwapMiddleWareController());
+        doReturn(mockAlertAssignmentDAOImpl).when(controller).createAlertAssignmentDAOImpl();
+        
+        controller.preparePageModel(mockContext, mockPageModel);
+
+        // Then
+        verify(mockPageModel).setValue(eq("userRole"), eq("ADMINUSERVIEWER"));
+    }
+
+    // Helper method that would need to be added to the controller for testing
+    // This assumes the controller has a method to create the DAO implementation
+    // If not present, you'll need to modify the controller to be more testable
+    private CwapMiddleWareController createTestableController() {
+        return new CwapMiddleWareController() {
+            protected CwapMiddleWareDAOImpl createAlertAssignmentDAOImpl() {
+                return mockAlertAssignmentDAOImpl;
+            }
+        };
+    }
+}
