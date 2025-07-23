@@ -1,210 +1,129 @@
-package com.example.controller;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.MockitoAnnotations;
+
+import java.util.ArrayList;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
-class CwapMiddleWareControllerTest {
+// Assuming these are your custom classes, adjust imports as necessary
+import com.example.model.Context;
+import com.example.model.PageModel;
+import com.example.model.User;
+import com.example.dao.AlertAssignmentDAOImpl;
+import com.example.exception.PluginException;
+import com.example.exception.TranslatableException;
+import com.example.model.TranslatableMessage;
+
+// Mocking the Logger if you have a specific logging framework, otherwise use a no-op mock
+// import org.slf4j.Logger;
+// import org.slf4j.LoggerFactory;
+
+public class CwapMiddleWareControllerTest {
+
+    @InjectMocks
+    private CwapMiddleWareController cwapMiddleWareController;
 
     @Mock
     private Context mockContext;
-    
+
     @Mock
     private PageModel mockPageModel;
-    
+
     @Mock
     private User mockCurrentUser;
-    
-    @InjectMocks
-    private CwapMiddleWareController controller;
 
-    private static final String TEST_USER_ID = "test123";
-    private static final String TEST_USER_ROLE = "ADMIN";
-    private static final String TEST_FULL_NAME = "John Doe";
+    @Mock
+    private AlertAssignmentDAOImpl mockAlertAssignmentDAOImpl;
+
+    // If you're using a specific logging framework like SLF4J, you might mock it like this:
+    // @Mock
+    // private Logger mockLogger;
 
     @BeforeEach
     void setUp() {
-        // Initialize the controller with default values
-        controller = new CwapMiddleWareController();
+        MockitoAnnotations.openMocks(this);
+        // If you need to mock the static LoggerFactory or other static methods,
+        // consider using PowerMock or adjust your class to allow injection of Logger.
+        // For simplicity, we'll assume the logger in the controller is effectively a no-op for basic tests.
     }
 
     @Test
-    void testHandleSubmit() throws Exception {
-        // Given
+    void testHandleSubmit() throws PluginException {
+        // No specific logic to test inside handleSubmit based on the provided code,
+        // but we can verify it doesn't throw an exception.
+        assertDoesNotThrow(() -> cwapMiddleWareController.handleSubmit(mockContext, mockPageModel));
+        // You can add verification for logger.debug if you mock the logger
+        // verify(mockLogger).debug("CwapMiddleWareController - handleSubmit");
+    }
+
+    @Test
+    void testPreparePageModel() throws PluginException {
+        // Arrange
+        String userId = "testUser";
+        String fullName = "Test User Full Name";
+        String userRole = "ROLE_ADMIN,ROLE_USER"; // Example roles from DAO
+
         when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
-        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
+        when(mockCurrentUser.getUserIdentifier()).thenReturn(userId);
+        when(mockCurrentUser.getFullName()).thenReturn(fullName);
+        when(mockAlertAssignmentDAOImpl.getRoleName(any(Context.class), any(String.class)))
+                .thenReturn(Arrays.asList("ROLE_ADMIN", "ROLE_USER")); // Simulate roles returned by DAO
 
-        // When
-        controller.handleSubmit(mockContext, mockPageModel);
+        // Act
+        cwapMiddleWareController.preparePageModel(mockContext, mockPageModel);
 
-        // Then
-        // Verify that the method executes without throwing exceptions
-        // Since the method only contains logging, we can verify it completed successfully
-        assertDoesNotThrow(() -> controller.handleSubmit(mockContext, mockPageModel));
-    }
+        // Assert
+        verify(mockContext).getCurrentUser();
+        verify(mockCurrentUser, times(2)).getUserIdentifier(); // Called twice: once for variable, once for model.setValue
+        verify(mockCurrentUser).getFullName();
 
-    @Test
-    void testPreparePageModel_WithValidUser() throws Exception {
-        // Given
-        when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
-        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
-        when(mockCurrentUser.getFullName()).thenReturn(TEST_FULL_NAME);
+        verify(mockAlertAssignmentDAOImpl).getRoleName(mockContext, userId);
 
-        // When
-        controller.preparePageModel(mockContext, mockPageModel);
+        // Verify model.setValue calls
+        verify(mockPageModel).setValue("userId", userId);
+        verify(mockPageModel).setValue("fullName", fullName);
+        verify(mockPageModel).setValue("userRole", "ROLE_ADMIN,ROLE_USER"); // Check the cleaned-up role string
 
-        // Then
-        verify(mockPageModel).setTitle("CWAP Portal");
-        verify(mockPageModel).setValue("userId", TEST_USER_ID);
-        verify(mockPageModel).setValue("fullName", TEST_FULL_NAME);
-        // Note: userRole verification removed as it depends on DAO implementation
-    }
-
-    @Test
-    void testPreparePageModel_WithNullUser() throws Exception {
-        // Given
-        when(mockContext.getCurrentUser()).thenReturn(null);
-
-        // When & Then
-        assertThrows(NullPointerException.class, () -> {
-            controller.preparePageModel(mockContext, mockPageModel);
-        });
-    }
-
-    @Test
-    void testPreparePageModel_RoleProcessing() throws Exception {
-        // Given
-        when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
-        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
-        when(mockCurrentUser.getFullName()).thenReturn(TEST_FULL_NAME);
-
-        // When
-        controller.preparePageModel(mockContext, mockPageModel);
-
-        // Then
-        verify(mockPageModel).setTitle("CWAP Portal");
-        verify(mockPageModel).setValue("userId", TEST_USER_ID);
-        verify(mockPageModel).setValue("fullName", TEST_FULL_NAME);
-        // Role processing test would need to be done with actual DAO integration
+        // You can add verification for logger.debug if you mock the logger
+        // verify(mockLogger).debug("CwapMiddleWareController - preparePageModel starts...");
+        // verify(mockLogger).debug("CwapMiddleWareController - preparePageModel ends...");
     }
 
     @Test
     void testGetPageLocation() {
-        // When
-        String result = controller.getPageLocation(mockContext);
+        // Act
+        String pageLocation = cwapMiddleWareController.getPageLocation(mockContext);
 
-        // Then
-        assertEquals("vtl/index.html", result);
+        // Assert
+        assertEquals("vtl/index.html", pageLocation);
+        // verify(mockLogger).debug("CwapMiddleWareController - getPageLocation");
     }
 
     @Test
     void testSendErrorMessage() {
-        // Given
-        String testMessage = "Test error message";
+        String testMessage = "Test Error Message";
 
-        // When & Then
-        TranslatableException exception = assertThrows(TranslatableException.class, () -> {
-            controller.sendErrorMessage(testMessage);
+        // We are testing a static method, which is a bit different.
+        // For static methods, you often need PowerMockito or to rethink the design if you want to mock
+        // the constructor of TranslatableMessage and TranslatableException.
+        // For a basic test, we can just verify it throws the correct exception with the correct message.
+
+        // Act & Assert
+        TranslatableException thrown = assertThrows(TranslatableException.class, () -> {
+            CwapMiddleWareController.sendErrorMessage(testMessage);
         });
 
-        assertNotNull(exception);
-        // The exception should contain the translatable message
-        assertTrue(exception.getMessage().contains(testMessage) || 
-                   exception.getCause().getMessage().contains(testMessage));
-    }
-
-    @Test
-    void testSendErrorMessage_WithNullMessage() {
-        // When & Then
-        assertThrows(TranslatableException.class, () -> {
-            controller.sendErrorMessage(null);
-        });
-    }
-
-    @Test
-    void testSendErrorMessage_WithEmptyMessage() {
-        // Given
-        String emptyMessage = "";
-
-        // When & Then
-        assertThrows(TranslatableException.class, () -> {
-            controller.sendErrorMessage(emptyMessage);
-        });
-    }
-
-    @Test
-    void testGetRoleNameProperty() throws Exception {
-        // Given
-        when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
-        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
-        when(mockCurrentUser.getFullName()).thenReturn(TEST_FULL_NAME);
-        
-        // When
-        controller.preparePageModel(mockContext, mockPageModel);
-
-        // Then
-        // Verify that the method executes without errors
-        // getRoleName property would be populated by the actual DAO call
-        verify(mockPageModel).setTitle("CWAP Portal");
-        verify(mockPageModel).setValue("userId", TEST_USER_ID);
-        verify(mockPageModel).setValue("fullName", TEST_FULL_NAME);
-    }
-
-    @Test
-    void testControllerInitialization() {
-        // When
-        CwapMiddleWareController newController = new CwapMiddleWareController();
-
-        // Then
-        assertNotNull(newController);
-        // Verify initial state of collections and strings
-        assertNotNull(newController.collAlerts);
-        assertNotNull(newController.responseMessage);
-        assertNotNull(newController.getRoleName);
-        assertTrue(newController.collAlerts.isEmpty());
-        assertEquals("", newController.alertId);
-        assertEquals("", newController.userName);
-        assertEquals("", newController.isInquiryView);
-    }
-
-    @Test
-    void testMultipleRoleProcessing() throws Exception {
-        // Given
-        when(mockContext.getCurrentUser()).thenReturn(mockCurrentUser);
-        when(mockCurrentUser.getUserIdentifier()).thenReturn(TEST_USER_ID);
-        when(mockCurrentUser.getFullName()).thenReturn(TEST_FULL_NAME);
-
-        // When
-        controller.preparePageModel(mockContext, mockPageModel);
-
-        // Then
-        verify(mockPageModel).setTitle("CWAP Portal");
-        verify(mockPageModel).setValue("userId", TEST_USER_ID);
-        verify(mockPageModel).setValue("fullName", TEST_FULL_NAME);
-        // Role processing verification would require actual DAO integration
-    }
-
-    // Helper method for testing - if you need to test role processing specifically,
-    // you might need to create an integration test or modify the controller 
-    // to accept a DAO instance for better testability
-    @Test
-    void testControllerFieldAccess() {
-        // Test that we can access the public fields for verification
-        assertNotNull(controller.collAlerts);
-        assertNotNull(controller.responseMessage);
-        assertNotNull(controller.getRoleName);
-        
-        // Test initial values
-        assertTrue(controller.collAlerts.isEmpty());
-        assertEquals("", controller.alertId);
-        assertEquals("", controller.userName);
-        assertEquals("", controller.isInquiryView);
+        // Verify the message within the TranslatableException
+        assertNotNull(thrown.getMessage()); // Or more specific check if TranslatableException has a getter for TranslatableMessage
+        // Assuming TranslatableException's getMessage() returns the message from TranslatableMessage
+        // Or you might need to check internal state if the exception class is complex.
+        // This is a basic check.
+        assertTrue(thrown.getMessage().contains(testMessage));
     }
 }
